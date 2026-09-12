@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Auto Merge Game (Reels)</title>
+<style>
+  html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+  body { display:flex; align-items:center; justify-content:center; font-family:-apple-system, "Noto Sans KR", sans-serif; }
+  canvas { display:block; background:#000; }
+  #ui { position:fixed; top:12px; right:12px; display:flex; gap:8px; z-index:10; }
+  #ui button, #ui select {
+    background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.3);
+    border-radius:20px; padding:8px 14px; font-size:14px; cursor:pointer; backdrop-filter:blur(6px);
+  }
+  #ui button.rec { background:#e0245e; border-color:#e0245e; }
+  #hint { position:fixed; bottom:10px; left:0; right:0; text-align:center; color:rgba(255,255,255,.35); font-size:12px; z-index:10; pointer-events:none; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <select id="presetSel"></select>
+  <button id="btnReset">다시 시작</button>
+  <button id="btnRec">● 녹화</button>
+  <button id="btnHide">UI 숨기기</button>
+</div>
+<div id="hint">H: UI 숨기기/보이기 · R: 녹화 · 스페이스: 다시 시작 · URL ?preset=이름 &ui=0</div>
+
+<script>
+/* ============================================================
+   ▼▼▼ 여기만 수정하면 됩니다: 단계별 요소 설정 ▼▼▼
+   - 각 프리셋은 낮은 단계 → 높은 단계 순서의 배열입니다.
+   - 같은 단계 두 개가 닿으면 다음 단계 하나로 합쳐집니다.
+   - 항목 속성:
+       name   : 하단 진행표에 표시되는 이름
+       r      : 반지름(px, 1080x1920 캔버스 기준) - 단계가 올라갈수록 크게
+       emoji  : 이모지로 그릴 때 (예: "🌑")
+       image  : 이미지 URL로 그릴 때 (원형으로 잘라서 표시) - emoji보다 우선
+       colors : 이모지/이미지 없이 구슬(그라데이션 공)로 그릴 때 [밝은색, 어두운색]
+       label  : 구슬 위에 쓸 짧은 글자 (colors 방식일 때만)
+       glow   : 주변에 퍼지는 빛 색상
+   ============================================================ */
+const PRESETS = {
+  planets: {
+    title: "달 × 2 = 화성 … 끝까지 가면?",
+    items: [
+      { name:"달",     r:36,  colors:["#f4f2ff","#7f7f9c"], glow:"#dcd6ff" },
+      { name:"화성",   r:48,  colors:["#ff9c7a","#8a2a12"], glow:"#ff5a36" },
+      { name:"금성",   r:62,  colors:["#ffe6a8","#b8761a"], glow:"#ffc44d" },
+      { name:"지구",   r:78,  emoji:"🌍", glow:"#4da3ff" },
+      { name:"해왕성", r:96,  colors:["#8fd3ff","#1240a8"], glow:"#3d7bff" },
+      { name:"토성",   r:116, emoji:"🪐", glow:"#f2d28b" },
+      { name:"목성",   r:138, colors:["#ffd9b0","#8a4a1e"], glow:"#ff9e5e" },
+      { name:"태양",   r:164, emoji:"☀️", glow:"#ffb300" },
+      { name:"별",     r:192, emoji:"🌟", glow:"#fff176" },
+      { name:"은하",   r:224, emoji:"🌌", glow:"#b388ff" },
+    ],
+  },
+  gems: {
+    title: "보석이 합쳐지면?",
+    items: [
+      { name:"진주",     r:36,  colors:["#ffffff","#b9b9c9"], glow:"#ffffff" },
+      { name:"에메랄드", r:48,  colors:["#8dffb0","#0d7a35"], glow:"#2eff7a" },
+      { name:"자수정",   r:62,  colors:["#e6a8ff","#5a1a8a"], glow:"#c04dff" },
+      { name:"토파즈",   r:78,  colors:["#ffe08a","#b86a05"], glow:"#ffb02e" },
+      { name:"사파이어", r:96,  colors:["#8fa8ff","#1a1fa8"], glow:"#3d5aff" },
+      { name:"루비",     r:116, colors:["#ff8a8a","#9a0a1a"], glow:"#ff2a4a" },
+      { name:"다이아",   r:138, emoji:"💎", glow:"#9be7ff" },
+      { name:"왕관",     r:164, emoji:"👑", glow:"#ffd54f" },
+    ],
+  },
+  fruits: {
+    title: "과일 합치기",
+    items: [
+      { name:"체리",   r:34,  emoji:"🍒", glow:"#ff5a7a" },
+      { name:"딸기",   r:46,  emoji:"🍓", glow:"#ff4d6d" },
+      { name:"포도",   r:60,  emoji:"🍇", glow:"#b04dff" },
+      { name:"귤",     r:76,  emoji:"🍊", glow:"#ff9d2e" },
+      { name:"사과",   r:94,  emoji:"🍎", glow:"#ff3b3b" },
+      { name:"복숭아", r:114, emoji:"🍑", glow:"#ffb08a" },
+      { name:"파인애플",r:136, emoji:"🍍", glow:"#ffd54f" },
+      { name:"멜론",   r:160, emoji:"🍈", glow:"#b8ff7a" },
+      { name:"수박",   r:190, emoji:"🍉", glow:"#ff5a5a" },
+    ],
+  },
+};
+
+/* ---------- 게임 동작 설정 ---------- */
+const SETTINGS = {
+  preset: "planets",     // 기본 프리셋 (URL ?preset=gems 로 바꿀 수 있음)
+  dropIntervalMs: 900,   // 자동 낙하 간격
+  dropTiers: 3,          // 처음 몇 단계까지 랜덤으로 떨어뜨릴지
+  maxTierVanish: true,   // 마지막 단계끼리 합치면 사라지게 (false면 그대로 유지)
+  gravity: 2600,         // 중력 (px/s²)
+  restitution: 0.15,     // 튕김 정도 (0~1)
+  gameOverHoldMs: 2500,  // 넘쳤을 때 몇 ms 뒤에 자동 재시작
+  showScore: true,
+  showLegend: true,      // 하단 진행표(단계 나열) 표시
+  showTitle: true,
+  bgColor: "#000000",
+  ringColors: ["#c9b6ff", "#ffd0e0"], // 용기 테두리 그라데이션
+};
+/* ▲▲▲ 설정 끝 ▲▲▲ */
+
+/* ================= 이하 엔진 ================= */
+const W = 1080, H = 1920;
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+canvas.width = W; canvas.height = H;
+
+// 용기 기하: 원형 그릇 + 위쪽 관
+const BOWL = { cx: W/2, cy: 1130, R: 490 };
+const TUBE = { half: 85, top: 0 };
+BOWL.neckY = BOWL.cy - Math.sqrt(BOWL.R*BOWL.R - TUBE.half*TUBE.half);
+const DANGER_Y = BOWL.neckY - 40;   // 이 선 위에서 멈춰있으면 게임오버
+
+const params = new URLSearchParams(location.search);
+let presetName = params.get("preset") in PRESETS ? params.get("preset") : SETTINGS.preset;
+let TIERS = PRESETS[presetName].items;
+
+let bodies = [], particles = [], popups = [];
+let score = 0, nextTier = 0, lastDrop = 0, overSince = 0, flash = 0, shake = 0;
+let uid = 0;
+const imgCache = {};
+
+function loadImages() {
+  for (const t of TIERS) if (t.image && !imgCache[t.image]) {
+    const im = new Image(); im.crossOrigin = "anonymous"; im.src = t.image; imgCache[t.image] = im;
+  }
+}
+function reset() {
+  bodies = []; particles = []; popups = []; score = 0; overSince = 0; flash = 0;
+  nextTier = randTier(); lastDrop = performance.now();
+}
+function randTier() {
+  // 관(TUBE)을 통과할 수 있는 크기의 단계만 떨어뜨림
+  let n = Math.min(SETTINGS.dropTiers, TIERS.length);
+  while (n > 1 && TIERS[n-1].r >= TUBE.half - 4) n--;
+  return Math.floor(Math.random() * n);
+}
+
+function spawn(tier, x, y, vx=0, vy=0) {
+  bodies.push({ id: uid++, tier, r: TIERS[tier].r, x, y, vx, vy, born: performance.now(), rot: (Math.random()-.5)*.6, av:0 });
+}
+function drop(now) {
+  const t = nextTier, r = TIERS[t].r;
+  const jitter = (Math.random()-.5) * Math.max(0, (TUBE.half - r) * 1.6);
+  spawn(t, BOWL.cx + jitter, 40 + r, 0, 120);
+  nextTier = randTier(); lastDrop = now;
+}
+
+/* ---------- 물리 ---------- */
+function step(dt) {
+  const g = SETTINGS.gravity, e = SETTINGS.restitution;
+  for (const b of bodies) {
+    b.vy += g * dt;
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    b.rot += b.av * dt; b.av *= 0.98;
+    b.vx *= 0.999;
+  }
+  // 용기 충돌
+  for (const b of bodies) {
+    if (b.y <= BOWL.neckY) {                      // 관 구간
+      const lim = TUBE.half - b.r;
+      if (lim <= 0) { b.x += (BOWL.cx - b.x) * 0.2; b.vx *= 0.9; }   // 관보다 큰 공: 중앙으로만 모음
+      else {
+        if (b.x < BOWL.cx - lim) { b.x = BOWL.cx - lim; b.vx = Math.abs(b.vx) * e; }
+        if (b.x > BOWL.cx + lim) { b.x = BOWL.cx + lim; b.vx = -Math.abs(b.vx) * e; }
+      }
+    } else {                                      // 그릇 구간
+      const dx = b.x - BOWL.cx, dy = b.y - BOWL.cy;
+      const d = Math.hypot(dx, dy) || 1e-6;
+      if (d + b.r > BOWL.R) {
+        const nx = dx/d, ny = dy/d, pen = d + b.r - BOWL.R;
+        b.x -= nx * pen; b.y -= ny * pen;
+        const vn = b.vx*nx + b.vy*ny;
+        if (vn > 0) {
+          b.vx -= (1+e) * vn * nx; b.vy -= (1+e) * vn * ny;
+          // 마찰
+          const tx = -ny, ty = nx, vt = b.vx*tx + b.vy*ty;
+          b.vx -= vt * 0.08 * tx; b.vy -= vt * 0.08 * ty;
+          b.av += vt * 0.002;
+        }
+      }
+    }
+  }
+  // 공끼리 충돌 + 합치기
+  const merges = [];
+  for (let i = 0; i < bodies.length; i++) {
+    const a = bodies[i];
+    for (let j = i+1; j < bodies.length; j++) {
+      const b = bodies[j];
+      const dx = b.x - a.x, dy = b.y - a.y, rs = a.r + b.r;
+      const d2 = dx*dx + dy*dy;
+      if (d2 >= rs*rs) continue;
+      const d = Math.sqrt(d2) || 1e-6, nx = dx/d, ny = dy/d;
+      if (a.tier === b.tier && !a.dead && !b.dead) { merges.push([a, b]); a.dead = b.dead = true; continue; }
+      const ma = a.r*a.r, mb = b.r*b.r, tot = ma + mb;
+      const pen = rs - d;
+      a.x -= nx * pen * (mb/tot); a.y -= ny * pen * (mb/tot);
+      b.x += nx * pen * (ma/tot); b.y += ny * pen * (ma/tot);
+      const rvx = b.vx - a.vx, rvy = b.vy - a.vy, vn = rvx*nx + rvy*ny;
+      if (vn < 0) {
+        const jimp = -(1+e) * vn / (1/ma + 1/mb);
+        a.vx -= jimp*nx/ma; a.vy -= jimp*ny/ma;
+        b.vx += jimp*nx/mb; b.vy += jimp*ny/mb;
+      }
+    }
+  }
+  for (const [a, b] of merges) doMerge(a, b);
+  if (merges.length) bodies = bodies.filter(b => !b.dead);
+}
+
+function doMerge(a, b) {
+  const t = a.tier, next = t + 1;
+  const x = (a.x + b.x)/2, y = (a.y + b.y)/2;
+  const vx = (a.vx + b.vx)/2, vy = (a.vy + b.vy)/2;
+  burst(x, y, TIERS[t].glow, TIERS[t].r);
+  score += (t+1) * (t+1) * 10;
+  if (next >= TIERS.length) {
+    if (!SETTINGS.maxTierVanish) { a.dead = false; b.dead = false; return; }
+    popups.push({ x, y, text: "MAX!", t: 0, color: TIERS[t].glow });
+    shake = 18; flash = 1;
+    return;
+  }
+  spawn(next, x, y, vx*0.5, vy*0.5);
+  const nb = bodies[bodies.length-1]; nb.pop = 1;
+  popups.push({ x, y: y - TIERS[next].r, text: TIERS[next].name, t: 0, color: TIERS[next].glow });
+  shake = Math.min(14, 3 + next*1.2);
+}
+function burst(x, y, color, r) {
+  const n = 16 + Math.floor(r/6);
+  for (let i = 0; i < n; i++) {
+    const ang = Math.random()*Math.PI*2, sp = 200 + Math.random()*500;
+    particles.push({ x, y, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, life: 1, color, size: 3 + Math.random()*6 });
+  }
+}
+
+/* ---------- 렌더 ---------- */
+function drawContainer() {
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, SETTINGS.ringColors[0]); grad.addColorStop(1, SETTINGS.ringColors[1]);
+  ctx.save();
+  ctx.strokeStyle = grad; ctx.lineWidth = 7; ctx.lineCap = "round";
+  ctx.shadowColor = SETTINGS.ringColors[0]; ctx.shadowBlur = 24;
+  const ang = Math.asin(TUBE.half / BOWL.R);
+  ctx.beginPath();
+  ctx.moveTo(BOWL.cx - TUBE.half, TUBE.top - 20);
+  ctx.lineTo(BOWL.cx - TUBE.half, BOWL.neckY);
+  ctx.arc(BOWL.cx, BOWL.cy, BOWL.R, -Math.PI/2 - ang, -Math.PI/2 + ang, true);
+  ctx.lineTo(BOWL.cx + TUBE.half, TUBE.top - 20);
+  ctx.stroke();
+  ctx.restore();
+}
+function drawBody(b, now) {
+  const t = TIERS[b.tier];
+  let s = 1;
+  if (b.pop) { b.pop = Math.max(0, b.pop - 0.08); s = 1 + Math.sin(b.pop*Math.PI) * 0.28; }
+  ctx.save();
+  ctx.translate(b.x, b.y); ctx.rotate(b.rot); ctx.scale(s, s);
+  ctx.shadowColor = t.glow || "#fff"; ctx.shadowBlur = 30 + b.r*0.25;
+  const img = t.image && imgCache[t.image];
+  if (img && img.complete && img.naturalWidth) {
+    ctx.beginPath(); ctx.arc(0, 0, b.r, 0, Math.PI*2); ctx.fillStyle = t.glow; ctx.globalAlpha = .35; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.clip(); ctx.drawImage(img, -b.r, -b.r, b.r*2, b.r*2);
+  } else if (t.emoji) {
+    ctx.font = `${Math.round(b.r*1.85)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(t.emoji, 0, b.r*0.08);
+  } else {
+    const c = t.colors || ["#fff", "#888"];
+    const g = ctx.createRadialGradient(-b.r*0.35, -b.r*0.35, b.r*0.1, 0, 0, b.r);
+    g.addColorStop(0, "#ffffff"); g.addColorStop(0.15, c[0]); g.addColorStop(1, c[1]);
+    ctx.beginPath(); ctx.arc(0, 0, b.r, 0, Math.PI*2); ctx.fillStyle = g; ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.arc(0, 0, b.r, 0, Math.PI*2); ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 2; ctx.stroke();
+    // 하이라이트
+    ctx.beginPath(); ctx.ellipse(-b.r*0.35, -b.r*0.4, b.r*0.28, b.r*0.16, -0.6, 0, Math.PI*2);
+    ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.fill();
+    if (t.label) {
+      ctx.fillStyle = "#fff"; ctx.font = `bold ${Math.round(b.r*0.5)}px sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(t.label, 0, 0);
+    }
+  }
+  ctx.restore();
+}
+function drawLegend() {
+  const n = TIERS.length, y = 1790, pad = 40;
+  const slot = (W - pad*2) / n;
+  ctx.save();
+  ctx.font = `bold 40px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (let i = 0; i < n; i++) {
+    const t = TIERS[i], x = pad + slot*(i+.5);
+    const r = 22 + i * (26 / Math.max(1, n-1));
+    ctx.shadowColor = t.glow; ctx.shadowBlur = 16;
+    if (t.emoji) { ctx.font = `${Math.round(r*1.8)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; ctx.fillText(t.emoji, x, y); }
+    else { const c = t.colors || ["#fff","#888"]; const g = ctx.createRadialGradient(x - r*.3, y - r*.3, 2, x, y, r); g.addColorStop(0, c[0]); g.addColorStop(1, c[1]); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill(); }
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.font = "26px sans-serif";
+    ctx.fillText(t.name, x, y + 58);
+    if (i < n-1) { ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.font = "26px sans-serif"; ctx.fillText("›", x + slot/2, y); }
+  }
+  ctx.restore();
+}
+function render(now) {
+  ctx.save();
+  ctx.fillStyle = SETTINGS.bgColor; ctx.fillRect(0, 0, W, H);
+  if (shake > 0) { ctx.translate((Math.random()-.5)*shake, (Math.random()-.5)*shake); shake *= 0.85; if (shake < .5) shake = 0; }
+  drawContainer();
+  for (const b of bodies) drawBody(b, now);
+  // 파티클
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  // 합쳐질 때 이름 팝업
+  for (const p of popups) {
+    const a = 1 - p.t;
+    ctx.globalAlpha = a; ctx.fillStyle = "#fff"; ctx.shadowColor = p.color; ctx.shadowBlur = 20;
+    ctx.font = `900 ${Math.round(52 + p.t*30)}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(p.text, p.x, p.y - p.t*80);
+  }
+  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // 상단 텍스트
+  if (SETTINGS.showTitle) {
+    ctx.fillStyle = "#fff"; ctx.font = "800 54px sans-serif"; ctx.textAlign = "center";
+    ctx.shadowColor = "rgba(255,255,255,.5)"; ctx.shadowBlur = 14;
+    ctx.fillText(PRESETS[presetName].title, W/2, 150);
+    ctx.shadowBlur = 0;
+  }
+  if (SETTINGS.showScore) {
+    ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.font = "700 44px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(score.toLocaleString(), W/2, 225);
+  }
+  // 다음 공 미리보기 (관 위)
+  const nt = TIERS[nextTier];
+  ctx.save(); ctx.globalAlpha = .55; ctx.font = "30px sans-serif"; ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+  ctx.fillText("NEXT", W/2 + 200, 300);
+  drawBody({ x: W/2 + 200, y: 360, r: Math.min(40, nt.r), tier: nextTier, rot: 0 }, now);
+  ctx.restore();
+
+  if (SETTINGS.showLegend) drawLegend();
+  if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash*.6})`; ctx.fillRect(0,0,W,H); flash -= 0.06; }
+  if (overSince) {
+    ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#fff"; ctx.font = "900 110px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.shadowColor = "#fff"; ctx.shadowBlur = 30; ctx.fillText("GAME OVER", W/2, H/2); ctx.shadowBlur = 0;
+    ctx.font = "600 44px sans-serif"; ctx.fillText(`SCORE ${score.toLocaleString()}`, W/2, H/2 + 100);
+  }
+}
+
+/* ---------- 루프 ---------- */
+let last = performance.now(), acc = 0;
+const FIXED = 1/240;
+function loop(now) {
+  const frame = Math.min(0.05, (now - last)/1000); last = now; acc += frame;
+  if (!overSince) {
+    if (now - lastDrop > SETTINGS.dropIntervalMs) drop(now);
+    while (acc >= FIXED) { step(FIXED); acc -= FIXED; }
+    // 게임오버 판정: 떨어진 지 한참 지났는데 아직 위험선 위에 있는 공 (새로 떨어지는 공은 0.7초 안에 통과함)
+    const stuck = bodies.some(b => b.y - b.r < DANGER_Y && now - b.born > 1400);
+    if (stuck) { overSince = now; shake = 20; }
+  } else if (now - overSince > SETTINGS.gameOverHoldMs) reset();
+  for (const p of particles) { p.x += p.vx*frame; p.y += p.vy*frame; p.vy += 1500*frame; p.life -= frame*1.6; }
+  particles = particles.filter(p => p.life > 0);
+  for (const p of popups) p.t += frame * 1.2;
+  popups = popups.filter(p => p.t < 1);
+  render(now);
+  requestAnimationFrame(loop);
+}
+
+/* ---------- 화면 맞춤 ---------- */
+function fit() {
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  canvas.style.width = Math.floor(W*s) + "px"; canvas.style.height = Math.floor(H*s) + "px";
+}
+addEventListener("resize", fit); fit();
+
+/* ---------- UI / 녹화 ---------- */
+const ui = document.getElementById("ui"), hint = document.getElementById("hint");
+const sel = document.getElementById("presetSel");
+for (const k of Object.keys(PRESETS)) { const o = document.createElement("option"); o.value = k; o.textContent = k; sel.appendChild(o); }
+sel.value = presetName;
+sel.onchange = () => { presetName = sel.value; TIERS = PRESETS[presetName].items; loadImages(); reset(); };
+document.getElementById("btnReset").onclick = reset;
+function toggleUI() { ui.classList.toggle("hidden"); hint.classList.toggle("hidden"); }
+document.getElementById("btnHide").onclick = toggleUI;
+if (params.get("ui") === "0") toggleUI();
+
+let recorder = null, chunks = [];
+const btnRec = document.getElementById("btnRec");
+function toggleRec() {
+  if (recorder) { recorder.stop(); return; }
+  const stream = canvas.captureStream(60);
+  const mime = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"].find(m => MediaRecorder.isTypeSupported(m));
+  recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
+  chunks = [];
+  recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, { type: mime });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = `merge-${presetName}-${Date.now()}.${mime.includes("mp4") ? "mp4" : "webm"}`; a.click();
+    recorder = null; btnRec.textContent = "● 녹화"; btnRec.classList.remove("rec");
+  };
+  recorder.start(200);
+  btnRec.textContent = "■ 녹화 중지"; btnRec.classList.add("rec");
+}
+btnRec.onclick = toggleRec;
+addEventListener("keydown", e => {
+  if (e.key === "h" || e.key === "H") toggleUI();
+  if (e.key === "r" || e.key === "R") toggleRec();
+  if (e.key === " ") { e.preventDefault(); reset(); }
+});
+
+loadImages(); reset(); requestAnimationFrame(loop);
+</script>
+</body>
+</html>
