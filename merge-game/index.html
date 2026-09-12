@@ -239,6 +239,15 @@ function burst(x, y, color, r) {
 }
 
 /* ---------- 렌더 ---------- */
+function containerPath(inset = 0) {
+  const R = BOWL.R - inset, half = TUBE.half - inset, ang = Math.asin(half / R);
+  ctx.beginPath();
+  ctx.moveTo(BOWL.cx - half, TUBE.top - 20);
+  ctx.lineTo(BOWL.cx - half, BOWL.cy - Math.sqrt(R*R - half*half));
+  ctx.arc(BOWL.cx, BOWL.cy, R, -Math.PI/2 - ang, -Math.PI/2 + ang, true);
+  ctx.lineTo(BOWL.cx + half, TUBE.top - 20);
+  ctx.closePath();
+}
 function drawContainer() {
   const grad = ctx.createLinearGradient(0, 0, W, H);
   grad.addColorStop(0, SETTINGS.ringColors[0]); grad.addColorStop(1, SETTINGS.ringColors[1]);
@@ -266,7 +275,7 @@ function drawBody(b, now) {
     ctx.beginPath(); ctx.arc(0, 0, b.r, 0, Math.PI*2); ctx.fillStyle = t.glow; ctx.globalAlpha = .35; ctx.fill(); ctx.globalAlpha = 1;
     ctx.clip(); ctx.drawImage(img, -b.r, -b.r, b.r*2, b.r*2);
   } else if (t.emoji) {
-    ctx.font = `${Math.round(b.r*1.85)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    ctx.font = `${Math.round(b.r*1.6)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(t.emoji, 0, b.r*0.08);
   } else {
@@ -308,15 +317,17 @@ function render(now) {
   ctx.save();
   ctx.fillStyle = SETTINGS.bgColor; ctx.fillRect(0, 0, W, H);
   if (shake > 0) { ctx.translate((Math.random()-.5)*shake, (Math.random()-.5)*shake); shake *= 0.85; if (shake < .5) shake = 0; }
-  drawContainer();
+  // 공·빛 번짐·파티클은 용기 안쪽(테두리 선 안)으로만 그림
+  ctx.save();
+  containerPath(3); ctx.clip();
   for (const b of bodies) drawBody(b, now);
-  // 파티클
   for (const p of particles) {
     ctx.globalAlpha = Math.max(0, p.life);
     ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 12;
     ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI*2); ctx.fill();
   }
-  ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  ctx.restore();
+  drawContainer();
   // 합쳐질 때 이름 팝업
   for (const p of popups) {
     const a = 1 - p.t;
@@ -338,13 +349,6 @@ function render(now) {
     ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.font = "700 44px sans-serif"; ctx.textAlign = "center";
     ctx.fillText(score.toLocaleString(), W/2, 225);
   }
-  // 다음 공 미리보기 (관 위)
-  const nt = TIERS[nextTier];
-  ctx.save(); ctx.globalAlpha = .55; ctx.font = "30px sans-serif"; ctx.fillStyle = "#fff"; ctx.textAlign = "center";
-  ctx.fillText("NEXT", W/2 + 200, 300);
-  drawBody({ x: W/2 + 200, y: 360, r: Math.min(40, nt.r), tier: nextTier, rot: 0 }, now);
-  ctx.restore();
-
   if (SETTINGS.showLegend) drawLegend();
   if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash*.6})`; ctx.fillRect(0,0,W,H); flash -= 0.06; }
   if (overSince) {
