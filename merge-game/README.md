@@ -2,6 +2,11 @@
 
 같은 단계 두 개가 닿으면 다음 단계로 합쳐지는 게임. 플레이어 조작 없이 자동으로 공이 떨어지고, 넘치면 자동으로 재시작됩니다. 1080×1920(9:16) 캔버스라 인스타 릴스에 그대로 올릴 수 있습니다.
 
+## 배포 주소
+
+- https://merge-game-reels-buskers88-6629s-projects.vercel.app (Vercel, 프로젝트 `merge-game-reels`)
+- 예: `?preset=fruits&ui=0` 을 붙이면 과일 프리셋을 UI 없이 바로 실행
+
 ## 실행
 
 `merge-game/index.html` 을 브라우저(크롬 권장)로 열면 바로 시작됩니다. 서버 필요 없음.
