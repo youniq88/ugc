@@ -15,6 +15,8 @@
   }
   #ui button.rec { background:#e0245e; border-color:#e0245e; }
   #hint { position:fixed; bottom:10px; left:0; right:0; text-align:center; color:rgba(255,255,255,.35); font-size:12px; z-index:10; pointer-events:none; }
+  #audioHint { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); color:#fff; background:rgba(0,0,0,.55);
+    border:1px solid rgba(255,255,255,.3); border-radius:30px; padding:12px 22px; font-size:15px; z-index:20; pointer-events:none; backdrop-filter:blur(6px); }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -26,6 +28,7 @@
   <button id="btnRec">● 녹화</button>
   <button id="btnHide">UI 숨기기</button>
 </div>
+<div id="audioHint">🔈 화면을 한 번 탭하면 소리가 켜집니다</div>
 <div id="hint">H: UI 숨기기/보이기 · R: 녹화 · 스페이스: 다시 시작 · URL ?preset=이름 &ui=0</div>
 
 <script>
@@ -33,6 +36,7 @@
    ▼▼▼ 여기만 수정하면 됩니다: 단계별 요소 설정 ▼▼▼
    - 각 프리셋은 낮은 단계 → 높은 단계 순서의 배열입니다.
    - 같은 단계 두 개가 닿으면 다음 단계 하나로 합쳐집니다.
+   - 프리셋 속성 sound: 효과음 테마 ("space" 신비로운 / "juicy" 쥬시한 / "crystal" 유리·보석)
    - 항목 속성:
        name   : 하단 진행표에 표시되는 이름
        r      : 반지름(px, 1080x1920 캔버스 기준) - 단계가 올라갈수록 크게
@@ -45,6 +49,7 @@
 const PRESETS = {
   planets: {
     title: "달 × 2 = 화성 … 끝까지 가면?",
+    sound: "space",
     items: [
       { name:"달",     r:36,  colors:["#f4f2ff","#7f7f9c"], glow:"#dcd6ff" },
       { name:"화성",   r:48,  colors:["#ff9c7a","#8a2a12"], glow:"#ff5a36" },
@@ -60,6 +65,7 @@ const PRESETS = {
   },
   gems: {
     title: "보석이 합쳐지면?",
+    sound: "crystal",
     items: [
       { name:"진주",     r:36,  colors:["#ffffff","#b9b9c9"], glow:"#ffffff" },
       { name:"에메랄드", r:48,  colors:["#8dffb0","#0d7a35"], glow:"#2eff7a" },
@@ -73,6 +79,7 @@ const PRESETS = {
   },
   fruits: {
     title: "과일 합치기",
+    sound: "juicy",
     items: [
       { name:"체리",   r:34,  emoji:"🍒", glow:"#ff5a7a" },
       { name:"딸기",   r:46,  emoji:"🍓", glow:"#ff4d6d" },
@@ -99,6 +106,7 @@ const SETTINGS = {
   showScore: true,
   showLegend: true,      // 하단 진행표(단계 나열) 표시
   showTitle: true,
+  soundVolume: 0.8,      // 효과음 크기 (0~1, 0이면 무음)
   bgColor: "#000000",
   ringColors: ["#c9b6ff", "#ffd0e0"], // 용기 테두리 그라데이션
 };
@@ -151,7 +159,121 @@ function drop(now) {
   nextTier = randTier(); lastDrop = now;
 }
 
+/* ---------- 사운드 (Web Audio 합성, 외부 파일 없음) ---------- */
+let actx = null, master = null, recDest = null, verb = null, noiseBuf = null;
+let lastHitAt = 0, hitCount = 0;
+function initAudio() {
+  if (actx) { if (actx.state !== "running") actx.resume(); return; }
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+  actx = new AC();
+  master = actx.createGain(); master.gain.value = SETTINGS.soundVolume;
+  const comp = actx.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 6;
+  master.connect(comp); comp.connect(actx.destination);
+  recDest = actx.createMediaStreamDestination(); comp.connect(recDest);   // 녹화용
+  // 간단한 리버브(피드백 딜레이)
+  verb = actx.createGain(); verb.gain.value = 0.35;
+  const dl = actx.createDelay(1); dl.delayTime.value = 0.23;
+  const fb = actx.createGain(); fb.gain.value = 0.45;
+  const lp = actx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2800;
+  verb.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(master);
+  // 노이즈 버퍼
+  noiseBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
+  const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1;
+  actx.resume();
+  document.getElementById("audioHint").classList.add("hidden");
+}
+function tone({ type="sine", f0, f1, a=0.005, d=0.3, vol=0.2, verbAmt=0, detune=0 }) {
+  const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.detune.value = detune;
+  if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + d);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
+  o.connect(g); g.connect(master); if (verbAmt) { const vg = actx.createGain(); vg.gain.value = verbAmt; g.connect(vg); vg.connect(verb); }
+  o.start(t); o.stop(t + a + d + 0.05);
+}
+function noise({ type="bandpass", f0, f1, q=1, a=0.002, d=0.1, vol=0.2, verbAmt=0 }) {
+  const t = actx.currentTime, src = actx.createBufferSource(), fl = actx.createBiquadFilter(), g = actx.createGain();
+  src.buffer = noiseBuf; fl.type = type; fl.Q.value = q; fl.frequency.setValueAtTime(f0, t);
+  if (f1) fl.frequency.exponentialRampToValueAtTime(f1, t + d);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
+  src.connect(fl); fl.connect(g); g.connect(master); if (verbAmt) { const vg = actx.createGain(); vg.gain.value = verbAmt; g.connect(vg); vg.connect(verb); }
+  src.start(t); src.stop(t + a + d + 0.05);
+}
+const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+const noteHz = (base, idx) => base * Math.pow(2, PENTA[Math.max(0, Math.min(PENTA.length-1, idx))] / 12);
+/* 테마별 소리: hit(단계, 세기 0~1) / merge(합쳐진 단계) */
+const THEMES = {
+  // 우주: 부드러운 종·패드 느낌, 펜타토닉, 리버브 깊게
+  space: {
+    hit(tier, k) {
+      const f = noteHz(196, TIERS.length - 1 - tier);
+      tone({ f0: f, a: 0.01, d: 0.7, vol: 0.10 + 0.15*k, verbAmt: 0.8 });
+      tone({ f0: f*2.005, a: 0.01, d: 0.45, vol: 0.04 + 0.05*k, verbAmt: 0.6 });
+      tone({ type: "triangle", f0: f*0.5, a: 0.02, d: 0.5, vol: 0.05*k, verbAmt: 0.5 });
+    },
+    merge(tier) {
+      const base = noteHz(262, tier);
+      [1, 1.5, 2].forEach((m, i) => setTimeout(() => {
+        tone({ f0: base*m, a: 0.02, d: 1.6, vol: 0.18, verbAmt: 1 });
+        tone({ f0: base*m*2.01, a: 0.02, d: 1.0, vol: 0.06, verbAmt: 1 });
+      }, i*90));
+      noise({ type: "highpass", f0: 1200, f1: 6000, a: 0.05, d: 0.9, vol: 0.05, verbAmt: 1 });
+    },
+  },
+  // 과일: 통통·촉촉한 플롭 + 물기 있는 노이즈
+  juicy: {
+    hit(tier, k) {
+      const f = 420 - tier*28;
+      tone({ f0: f, f1: f*0.35, a: 0.003, d: 0.11, vol: 0.12 + 0.22*k });
+      noise({ f0: 1900, f1: 700, q: 1.4, d: 0.07, vol: 0.06 + 0.16*k });
+    },
+    merge(tier) {
+      const f = 300 - tier*14;
+      noise({ f0: 2600, f1: 350, q: 0.9, a: 0.005, d: 0.28, vol: 0.32 });
+      tone({ f0: f, f1: 55, a: 0.005, d: 0.32, vol: 0.30 });
+      setTimeout(() => tone({ f0: 1300, f1: 420, a: 0.002, d: 0.06, vol: 0.16 }), 40);
+      setTimeout(() => noise({ f0: 900, f1: 300, q: 2, d: 0.12, vol: 0.12 }), 110);
+    },
+  },
+  // 보석: 유리 부딪히는 맑은 핑
+  crystal: {
+    hit(tier, k) {
+      const f = Math.max(520, 1700 - tier*110);
+      tone({ f0: f, a: 0.002, d: 0.32, vol: 0.09 + 0.16*k, verbAmt: 0.4 });
+      tone({ f0: f*2.76, a: 0.002, d: 0.18, vol: 0.03 + 0.06*k, verbAmt: 0.3 });
+      noise({ type: "highpass", f0: 5000, d: 0.02, vol: 0.05*k });
+    },
+    merge(tier) {
+      const base = noteHz(880, tier);
+      [1, 1.25, 1.5, 2].forEach((m, i) => setTimeout(() => {
+        tone({ f0: base*m, a: 0.002, d: 1.3, vol: 0.16, verbAmt: 0.9 });
+        tone({ f0: base*m*2.76, a: 0.002, d: 0.5, vol: 0.05, verbAmt: 0.7 });
+      }, i*70));
+      noise({ type: "highpass", f0: 4000, d: 0.08, vol: 0.12 });
+    },
+  },
+};
+const SFX = {
+  theme() { return THEMES[PRESETS[presetName].sound] || THEMES.space; },
+  hit(tier, strength) {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    const now = performance.now();
+    if (now - lastHitAt > 100) hitCount = 0;
+    if (hitCount >= 3) return;                    // 동시에 너무 많은 소리 방지
+    lastHitAt = now; hitCount++;
+    const k = Math.min(1, (strength - HIT_MIN) / 1100);
+    this.theme().hit(tier, k);
+  },
+  merge(tier) {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    this.theme().merge(tier);
+  },
+};
+// 브라우저 정책상 첫 터치/클릭/키 입력 후에 소리가 켜짐
+["pointerdown", "keydown", "touchstart"].forEach(ev => addEventListener(ev, initAudio, { passive: true }));
+
 /* ---------- 물리 ---------- */
+const HIT_MIN = 140;           // 이보다 느린 충돌은 소리 안 남 (px/s)
+const hits = [];
 function step(dt) {
   const g = SETTINGS.gravity, e = SETTINGS.restitution;
   for (const b of bodies) {
@@ -177,6 +299,7 @@ function step(dt) {
         b.x -= nx * pen; b.y -= ny * pen;
         const vn = b.vx*nx + b.vy*ny;
         if (vn > 0) {
+          if (vn > HIT_MIN) hits.push({ tier: b.tier, strength: vn });
           b.vx -= (1+e) * vn * nx; b.vy -= (1+e) * vn * ny;
           // 마찰
           const tx = -ny, ty = nx, vt = b.vx*tx + b.vy*ty;
@@ -203,13 +326,16 @@ function step(dt) {
       b.x += nx * pen * (ma/tot); b.y += ny * pen * (ma/tot);
       const rvx = b.vx - a.vx, rvy = b.vy - a.vy, vn = rvx*nx + rvy*ny;
       if (vn < 0) {
+        if (-vn > HIT_MIN) hits.push({ tier: Math.max(a.tier, b.tier), strength: -vn });
         const jimp = -(1+e) * vn / (1/ma + 1/mb);
         a.vx -= jimp*nx/ma; a.vy -= jimp*ny/ma;
         b.vx += jimp*nx/mb; b.vy += jimp*ny/mb;
       }
     }
   }
-  for (const [a, b] of merges) doMerge(a, b);
+  for (const [a, b] of merges) { doMerge(a, b); SFX.merge(a.tier); }
+  for (const h of hits) SFX.hit(h.tier, h.strength);
+  hits.length = 0;
   if (merges.length) bodies = bodies.filter(b => !b.dead);
 }
 
@@ -227,7 +353,6 @@ function doMerge(a, b) {
   }
   spawn(next, x, y, vx*0.5, vy*0.5);
   const nb = bodies[bodies.length-1]; nb.pop = 1;
-  popups.push({ x, y: y - TIERS[next].r, text: TIERS[next].name, t: 0, color: TIERS[next].glow });
   shake = Math.min(14, 3 + next*1.2);
 }
 function burst(x, y, color, r) {
@@ -307,8 +432,6 @@ function drawLegend() {
     if (t.emoji) { ctx.font = `${Math.round(r*1.8)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; ctx.fillText(t.emoji, x, y); }
     else { const c = t.colors || ["#fff","#888"]; const g = ctx.createRadialGradient(x - r*.3, y - r*.3, 2, x, y, r); g.addColorStop(0, c[0]); g.addColorStop(1, c[1]); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill(); }
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.font = "26px sans-serif";
-    ctx.fillText(t.name, x, y + 58);
     if (i < n-1) { ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.font = "26px sans-serif"; ctx.fillText("›", x + slot/2, y); }
   }
   ctx.restore();
@@ -401,7 +524,9 @@ let recorder = null, chunks = [];
 const btnRec = document.getElementById("btnRec");
 function toggleRec() {
   if (recorder) { recorder.stop(); return; }
+  initAudio();
   const stream = canvas.captureStream(60);
+  if (recDest) for (const tr of recDest.stream.getAudioTracks()) stream.addTrack(tr);
   const mime = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"].find(m => MediaRecorder.isTypeSupported(m));
   recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
   chunks = [];
