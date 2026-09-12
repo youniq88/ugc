@@ -49,6 +49,7 @@
        glow   : 주변에 퍼지는 빛 색상
        shape / colors : 코드로 그리는 도형 (이미지 없이 쓸 때. pearl teardrop emerald cushion brilliant star moon mars earth saturn jupiter sun blackhole galaxy sphere)
        emoji  : 이모지로 그릴 때
+       noSpin : true 면 물리 회전을 그리지 않음 (블랙홀처럼 기울면 어색한 것)
    ============================================================ */
 const KITS = {
   // 같은 파일을 두 곳에서 순서대로 시도 (앞이 실패하면 뒤)
@@ -58,7 +59,7 @@ const KITS = {
   ],
 };
 const PRESETS = {
-  planets: {   // 9단계: 초승달 → 그믐달 → 보름달 → 지구 → 토성 → 태양 → 별 → 빛나는 별 → 블랙홀
+  planets: {   // 9단계: 초승달 → 그믐달 → 보름달 → 지구 → 토성 → 태양 → 혜성 → 빛나는 별 → 블랙홀
     kit: "fluent", sound: "space",
     items: [
       { r:36,  img:"Crescent moon/3D/crescent_moon_3d.png",                           glow:"#ffd98a" },
@@ -67,9 +68,9 @@ const PRESETS = {
       { r:72,  img:"Globe showing europe-africa/3D/globe_showing_europe-africa_3d.png", glow:"#5ab4ff" },
       { r:90,  img:"Ringed planet/3D/ringed_planet_3d.png",                           glow:"#ffb64d" },
       { r:110, img:"Sun/3D/sun_3d.png",                                               glow:"#ffb300" },
-      { r:134, img:"Star/3D/star_3d.png",                                             glow:"#ffe066" },
+      { r:134, img:"Comet/3D/comet_3d.png",                                           glow:"#8fd3ff" },
       { r:160, img:"Glowing star/3D/glowing_star_3d.png",                             glow:"#fff3a0" },
-      { r:190, img:"Black circle/3D/black_circle_3d.png",                             glow:"#b06cff", scale:1.02 },
+      { r:190, shape:"blackhole", glow:"#ff9a3d", noSpin:true },                      // 인터스텔라 스타일 블랙홀 (코드 드로잉)
     ],
   },
   gems: {      // 9단계: 진주 → 에메랄드 → 사파이어 → 자수정 → 루비 → 주황 다이아 → 파랑 다이아 → 젬스톤 → 왕관
@@ -137,7 +138,8 @@ const params = new URLSearchParams(location.search);
 let presetName = params.get("preset") in PRESETS ? params.get("preset") : SETTINGS.preset;
 let TIERS = PRESETS[presetName].items;
 
-let bodies = [], particles = [], popups = [], rings = [];
+let bodies = [], particles = [], popups = [], rings = [], confetti = [];
+let ended = false, endedAt = 0;          // 마지막 단계 도달 후 정지 상태
 let score = 0, nextTier = 0, lastDrop = 0, overSince = 0, flash = 0, shake = 0;
 let gt = 0;                 // 게임 시계(ms) - 일시정지 중엔 멈춤
 let paused = false;
@@ -171,7 +173,7 @@ function loadImages() {
   return Promise.race([Promise.all(jobs), new Promise(r => setTimeout(r, 6000))]);
 }
 function reset() {
-  bodies = []; particles = []; popups = []; rings = []; score = 0; overSince = 0; flash = 0;
+  bodies = []; particles = []; popups = []; rings = []; confetti = []; score = 0; overSince = 0; flash = 0; ended = false;
   nextTier = randTier(); lastDrop = gt;
 }
 function randTier() {
@@ -310,17 +312,21 @@ function step(dt) {
   for (const b of bodies) {
     if (b.inTube) {
       b.vy = SETTINGS.tubeSpeed; b.vx = 0; b.x = BOWL.cx;
-      if (b.y > BOWL.neckY) {
+      if (b.y > BOWL.neckY) {                       // 그릇으로 진입: 가로 방향 힘을 0.3초에 걸쳐 서서히 (순간 속도 변화 없음)
         b.inTube = false;
-        b.vx = (Math.random() < .5 ? -1 : 1) * (140 + Math.random()*200);
+        b.kick = (Math.random() < .5 ? -1 : 1) * (500 + Math.random()*700); b.kickT = 0.3;
       }
-    } else b.vy += g * dt;
+    } else {
+      b.vy += g * dt;
+      if (b.kickT > 0) { b.vx += b.kick * dt; b.kickT -= dt; }
+    }
     b.x += b.vx * dt; b.y += b.vy * dt;
     b.vx *= 0.999;
     b.rot += b.av * dt; b.av *= 0.995;               // 각속도 (접촉 마찰로만 생김)
   }
   for (const b of bodies) {
-    if (b.y <= BOWL.neckY) {
+    // 용기 = 관 기둥 ∪ 원형 그릇. 몸체 일부라도 관 구간에 걸쳐 있으면 관 벽만, 완전히 아래로 내려오면 그릇 벽만 적용
+    if (b.y - b.r < BOWL.neckY) {
       const lim = TUBE.half - b.r;
       if (lim <= 0) { b.x += (BOWL.cx - b.x) * 0.2; b.vx *= 0.9; }
       else {
@@ -390,13 +396,29 @@ function doMerge(a, b) {
   score += (t+1) * (t+1) * 10;
   if (next >= TIERS.length) {
     if (!SETTINGS.maxTierVanish) { a.dead = false; b.dead = false; return; }
-    popups.push({ x, y, text: "MAX!", t: 0, color: TIERS[t].glow });
     shake = 18; flash = 1;
     return;
   }
   spawn(next, x, y, vx*0.5, vy*0.5);
   const nb = bodies[bodies.length-1]; nb.pop = 1;
   shake = Math.min(14, 3 + next*1.2);
+  if (next === TIERS.length - 1) finale(x, y, TIERS[next].glow);   // 마지막 요소 탄생!
+}
+// 축하 연출: 큰 폭발 파티클 + 색종이 + 충격파 여러 겹 + 화면 흔들림. 이후 게임 정지 (텍스트 없음)
+function finale(x, y, color) {
+  ended = true; endedAt = gt; flash = 1; shake = 30;
+  const palette = [color, "#ffffff", "#ffd54f", "#ff5a7a", "#4da3ff", "#2eff7a", "#c04dff"];
+  for (let i = 0; i < 3; i++) rings.push({ x, y, r0: 120 + i*60, color: palette[i], t: -i*0.18 });
+  for (let i = 0; i < 70; i++) {
+    const ang = Math.random()*Math.PI*2, sp = 400 + Math.random()*900;
+    particles.push({ x, y, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, life: 1.4, color: palette[i % palette.length], size: 5 + Math.random()*9, spin: Math.random()*Math.PI });
+  }
+  for (let i = 0; i < 180; i++) {                                   // 색종이: 위로 팡 터져서 흩날리며 떨어짐
+    const ang = -Math.PI/2 + (Math.random()-.5)*2.4, sp = 900 + Math.random()*1300;
+    confetti.push({ x, y, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, w: 10 + Math.random()*14, h: 6 + Math.random()*8,
+      rot: Math.random()*Math.PI, spin: (Math.random()-.5)*14, color: palette[i % palette.length], life: 4.5, sway: Math.random()*Math.PI*2 });
+  }
+  setTimeout(() => SFX.merge(TIERS.length - 1), 0); setTimeout(() => SFX.merge(TIERS.length - 2), 180); setTimeout(() => SFX.merge(TIERS.length - 1), 360);
 }
 function burst(x, y, color, r) {
   const n = 14 + Math.floor(r/6);
@@ -564,28 +586,40 @@ const SHAPES = {
       const core = g.createRadialGradient(-r*0.2, -r*0.2, 0, 0, 0, r); core.addColorStop(0, "rgba(255,255,230,0.9)"); core.addColorStop(0.5, "rgba(255,230,120,0)"); g.fillStyle = core; g.fillRect(-r, -r, 2*r, 2*r);
     } });
   },
-  blackhole(g, r) {                               // 강착 원반 + 광자 고리 + 검은 중심
+  blackhole(g, r) {                               // 인터스텔라(가르강튀아) 스타일: 검은 구 + 구를 감싸는 광환(렌즈된 원반) + 가로 강착 원반
     if (LIGHT_PASS) return;
-    const hole = r*0.42, rx = r*0.95, ry = r*0.28;
-    const warp = g.createRadialGradient(0, 0, hole, 0, 0, r);
-    warp.addColorStop(0, "rgba(255,190,90,0.7)"); warp.addColorStop(0.4, "rgba(255,90,30,0.25)"); warp.addColorStop(1, "rgba(120,40,140,0)");
-    g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fillStyle = warp; g.fill();
+    const hole = r*0.4;
+    // 바깥 열 안개
+    const haze = g.createRadialGradient(0, 0, hole*0.9, 0, 0, r*1.02);
+    haze.addColorStop(0, "rgba(255,180,80,0.5)"); haze.addColorStop(0.5, "rgba(255,120,30,0.14)"); haze.addColorStop(1, "rgba(255,90,20,0)");
+    g.beginPath(); g.arc(0, 0, r*1.02, 0, Math.PI*2); g.fillStyle = haze; g.fill();
+    // 가로 강착 원반 (도플러: 왼쪽 밝고 오른쪽 어두움)
     const disk = (front) => {
-      g.save(); g.rotate(-0.25);
-      const dg = g.createLinearGradient(-rx, 0, rx, 0);
-      dg.addColorStop(0, "rgba(255,120,40,0.15)"); dg.addColorStop(0.25, "rgba(255,170,60,0.9)"); dg.addColorStop(0.5, "rgba(255,245,220,1)"); dg.addColorStop(0.75, "rgba(255,170,60,0.9)"); dg.addColorStop(1, "rgba(255,120,40,0.15)");
-      g.beginPath(); g.ellipse(0, 0, rx, ry, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI*2);
+      g.save(); g.rotate(-0.1);
+      const dg = g.createLinearGradient(-r, 0, r, 0);
+      dg.addColorStop(0, "rgba(255,130,40,0.12)"); dg.addColorStop(0.15, "rgba(255,150,50,0.6)"); dg.addColorStop(0.32, "rgba(255,250,235,1)");
+      dg.addColorStop(0.55, "rgba(255,200,110,0.95)"); dg.addColorStop(0.8, "rgba(255,120,40,0.5)"); dg.addColorStop(1, "rgba(200,70,20,0.12)");
+      g.beginPath(); g.ellipse(0, 0, r*0.98, r*0.13, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI*2);
       g.strokeStyle = dg; g.lineWidth = r*0.2; g.lineCap = "round"; g.stroke();
-      g.beginPath(); g.ellipse(0, 0, rx*0.86, ry*0.86, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI*2);
-      g.strokeStyle = "rgba(255,255,240,0.55)"; g.lineWidth = r*0.035; g.stroke();
+      g.beginPath(); g.ellipse(0, 0, r*0.6, r*0.075, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI*2);   // 안쪽 밝은 띠
+      g.strokeStyle = "rgba(255,245,225,0.7)"; g.lineWidth = r*0.045; g.stroke();
       g.restore();
     };
     disk(false);
-    g.save(); g.shadowColor = "rgba(255,200,120,0.9)"; g.shadowBlur = r*0.25;                 // 광자 고리
-    g.beginPath(); g.arc(0, 0, hole*1.08, 0, Math.PI*2); g.strokeStyle = "rgba(255,230,180,0.95)"; g.lineWidth = r*0.05; g.stroke(); g.restore();
-    g.beginPath(); g.arc(0, 0, hole, 0, Math.PI*2); g.fillStyle = "#000"; g.fill();             // 사건의 지평선
-    const edge = g.createRadialGradient(0, 0, hole*0.7, 0, 0, hole);
-    edge.addColorStop(0, "rgba(0,0,0,0)"); edge.addColorStop(1, "rgba(255,140,60,0.35)");
+    // 광환: 원반의 뒤쪽이 중력렌즈로 휘어 구 위·아래를 감싸는 밝은 고리 (왼쪽이 더 밝음)
+    const ring = g.createRadialGradient(0, 0, hole*1.02, 0, 0, hole*1.75);
+    ring.addColorStop(0, "rgba(255,235,200,1)"); ring.addColorStop(0.28, "rgba(255,200,110,0.9)"); ring.addColorStop(0.7, "rgba(255,130,40,0.35)"); ring.addColorStop(1, "rgba(255,100,30,0)");
+    g.beginPath(); g.arc(0, 0, hole*1.75, 0, Math.PI*2); g.fillStyle = ring; g.fill();
+    const dop = g.createLinearGradient(-hole*1.8, 0, hole*1.8, 0);                       // 도플러 밝기 차이
+    dop.addColorStop(0, "rgba(255,255,255,0.35)"); dop.addColorStop(0.5, "rgba(0,0,0,0)"); dop.addColorStop(1, "rgba(60,20,0,0.35)");
+    g.beginPath(); g.arc(0, 0, hole*1.75, 0, Math.PI*2); g.fillStyle = dop; g.fill();
+    // 광자 고리 (아인슈타인 링): 얇고 아주 밝음
+    g.save(); g.shadowColor = "rgba(255,225,170,1)"; g.shadowBlur = hole*0.4;
+    g.beginPath(); g.arc(0, 0, hole*1.08, 0, Math.PI*2); g.strokeStyle = "rgba(255,245,225,0.95)"; g.lineWidth = hole*0.08; g.stroke(); g.restore();
+    // 사건의 지평선
+    g.beginPath(); g.arc(0, 0, hole, 0, Math.PI*2); g.fillStyle = "#000"; g.fill();
+    const edge = g.createRadialGradient(0, 0, hole*0.86, 0, 0, hole);
+    edge.addColorStop(0, "rgba(0,0,0,0)"); edge.addColorStop(1, "rgba(255,160,70,0.45)");
     g.beginPath(); g.arc(0, 0, hole, 0, Math.PI*2); g.fillStyle = edge; g.fill();
     disk(true);
   },
@@ -614,17 +648,26 @@ function makeSprite(t) {
     const c = document.createElement("canvas"); c.width = c.height = S;
     const g = c.getContext("2d"); g.translate(S/2, S/2);
     LIGHT_PASS = light;
-    if (!light) {                                               // 바깥 글로우 (두 겹) - 본체 층
-      const soft = t.emoji || img || t.shape === "star" || t.shape === "sun" || t.shape === "blackhole";
+    const hasImg = img && img.complete && img.naturalWidth;
+    if (!light && !hasImg && !t.emoji && t.shape !== "blackhole") {   // 코드 도형: 바깥 글로우 원판 (두 겹)
+      const soft = t.shape === "star" || t.shape === "sun";
       const halo = soft ? 0.5 : 0.85, haloR = soft ? r*0.72 : r*0.92;
       g.save(); g.shadowColor = t.glow || "#fff"; g.shadowBlur = pad; g.fillStyle = t.glow || "#fff";
       g.beginPath(); g.arc(0, 0, haloR, 0, Math.PI*2); g.globalAlpha = halo; g.fill(); g.shadowBlur = pad*0.45; g.fill(); g.restore();
     }
-    if (img && img.complete && img.naturalWidth) {
-      // 키트 PNG: 투명 배경 그대로, 여백만큼 살짝 키워서 충돌 원에 맞춤 (조명은 그림에 이미 있으므로 light 층 없음)
-      if (!light) { const k = (t.scale || 1.12) * r; g.drawImage(img, -k, -k, 2*k, 2*k); }
+    if (hasImg) {
+      // 키트 PNG: 그림의 실루엣을 따라 글로우 (가운데 원판 없음). 조명은 그림에 이미 있으므로 light 층 없음
+      if (!light) {
+        const k = (t.scale || 1.12) * r;
+        g.save(); g.shadowColor = t.glow || "#fff"; g.shadowBlur = pad*0.9; g.globalAlpha = 0.85;
+        g.drawImage(img, -k, -k, 2*k, 2*k); g.shadowBlur = pad*0.4; g.drawImage(img, -k, -k, 2*k, 2*k); g.restore();
+        g.drawImage(img, -k, -k, 2*k, 2*k);
+      }
     } else if (t.emoji) {
-      if (!light) { g.font = `${Math.round(r*1.6)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(t.emoji, 0, r*0.08); }
+      if (!light) {
+        g.font = `${Math.round(r*1.6)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
+        g.save(); g.shadowColor = t.glow || "#fff"; g.shadowBlur = pad*0.8; g.fillText(t.emoji, 0, r*0.08); g.restore(); g.fillText(t.emoji, 0, r*0.08);
+      }
     } else {
       (SHAPES[t.shape] || SHAPES.sphere)(g, r, t);
     }
@@ -684,7 +727,7 @@ function drawBody(b) {
   let s = 1;
   if (b.pop) { b.pop = Math.max(0, b.pop - 0.08); s = 1 + Math.sin(b.pop*Math.PI) * 0.28; }
   ctx.save(); ctx.translate(b.x, b.y); ctx.scale(s, s);
-  ctx.save(); ctx.rotate(b.rot || 0); ctx.drawImage(sp.base, -h, -h); ctx.restore();   // 본체: 물리 회전
+  ctx.save(); ctx.rotate(t.noSpin ? 0 : (b.rot || 0)); ctx.drawImage(sp.base, -h, -h); ctx.restore();   // 본체: 물리 회전
   ctx.drawImage(sp.light, -h, -h);                                                       // 조명: 고정
   ctx.restore();
 }
@@ -708,6 +751,7 @@ function render() {
   containerPathOn(ctx, 4); ctx.clip();
   for (const b of bodies) drawBody(b);
   for (const rg of rings) {                                     // 합체 충격파
+    if (rg.t < 0) continue;
     ctx.globalAlpha = (1 - rg.t) * 0.8; ctx.strokeStyle = rg.color; ctx.lineWidth = 6 * (1 - rg.t) + 1;
     ctx.beginPath(); ctx.arc(rg.x, rg.y, rg.r0 * (0.6 + rg.t*2.2), 0, Math.PI*2); ctx.stroke();
   }
@@ -720,6 +764,11 @@ function render() {
   ctx.globalAlpha = 1;
   ctx.restore();
   drawContainer();
+  for (const c of confetti) {                                   // 축하 색종이 (화면 전체)
+    ctx.save(); ctx.globalAlpha = Math.min(1, c.life); ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+    ctx.fillStyle = c.color; ctx.fillRect(-c.w/2, -c.h/2, c.w, c.h); ctx.restore();
+  }
+  ctx.globalAlpha = 1;
   for (const p of popups) {
     ctx.globalAlpha = 1 - p.t; ctx.fillStyle = "#fff"; ctx.shadowColor = p.color; ctx.shadowBlur = 20;
     ctx.font = `900 ${Math.round(52 + p.t*30)}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -749,13 +798,17 @@ function loop(now) {
   const frame = Math.min(0.05, (now - last)/1000); last = now;
   if (!paused) {
     gt += frame * 1000; acc += frame;
-    if (!overSince) {
+    if (ended) {                                                     // 마지막 요소 도달: 더 이상 떨어지지 않고 3초 뒤 물리도 정지
+      if (gt - endedAt < 3000) { while (acc >= FIXED) { step(FIXED); acc -= FIXED; } } else acc = 0;
+    } else if (!overSince) {
       if (gt - lastDrop > dropIntervalMs()) drop();
       while (acc >= FIXED) { step(FIXED); acc -= FIXED; }
       const transitMs = (BOWL.neckY + 40) / SETTINGS.tubeSpeed * 1000;
       const stuck = bodies.some(b => b.y - b.r < DANGER_Y && gt - b.born > transitMs + 900);
       if (stuck) { overSince = gt; shake = 20; }
     } else if (gt - overSince > SETTINGS.gameOverHoldMs) reset();
+    for (const c of confetti) { c.vy += 1400*frame; c.vx *= 0.985; c.vy *= 0.99; c.sway += frame*5; c.x += (c.vx + Math.sin(c.sway)*90)*frame; c.y += c.vy*frame; c.rot += c.spin*frame; c.life -= frame; }
+    confetti = confetti.filter(c => c.life > 0 && c.y < H + 40);
     for (const p of particles) { p.x += p.vx*frame; p.y += p.vy*frame; p.vy += 1500*frame; p.life -= frame*1.6; p.spin += frame*6; }
     particles = particles.filter(p => p.life > 0);
     for (const p of popups) p.t += frame * 1.2;
