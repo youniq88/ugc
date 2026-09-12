@@ -18,6 +18,13 @@
   #hint { position:fixed; bottom:10px; left:0; right:0; text-align:center; color:rgba(255,255,255,.35); font-size:12px; z-index:10; pointer-events:none; }
   #audioHint { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); color:#fff; background:rgba(0,0,0,.55);
     border:1px solid rgba(255,255,255,.3); border-radius:30px; padding:12px 22px; font-size:15px; z-index:20; pointer-events:none; backdrop-filter:blur(6px); }
+  #savePanel { position:fixed; inset:0; background:rgba(0,0,0,.72); z-index:30; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; backdrop-filter:blur(8px); }
+  #savePanel video { width:min(52vw, 260px); aspect-ratio:9/16; border-radius:16px; background:#000; box-shadow:0 10px 40px rgba(0,0,0,.6); }
+  #savePanel button { border:0; border-radius:28px; padding:16px 28px; font-size:18px; font-weight:700; cursor:pointer; }
+  #btnSave { background:#3d7bff; color:#fff; min-width:240px; }
+  #btnAgain { background:rgba(255,255,255,.15); color:#fff; }
+  #btnClose { background:transparent; color:rgba(255,255,255,.6); font-size:14px; font-weight:400; }
+  #saveMsg { color:rgba(255,255,255,.7); font-size:13px; text-align:center; max-width:80vw; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -29,6 +36,13 @@
   <button id="btnReset">다시 시작</button>
   <button id="btnRec">● 녹화</button>
   <button id="btnHide">UI 숨기기</button>
+</div>
+<div id="savePanel" class="hidden">
+  <video id="savePreview" playsinline muted autoplay loop></video>
+  <button id="btnSave">📲 사진 앨범에 저장</button>
+  <div id="saveMsg">아이폰: 공유 시트가 뜨면 "비디오 저장"을 누르세요</div>
+  <button id="btnAgain">● 다시 녹화</button>
+  <button id="btnClose">닫기</button>
 </div>
 <div id="audioHint">🔈 화면을 한 번 탭하면 소리가 켜집니다</div>
 <div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화(시작 시 UI 자동 숨김) · Enter: 다시 시작 · URL ?preset=이름 &ui=0</div>
@@ -849,16 +863,20 @@ function toggleRec() {
   initAudio();
   const stream = canvas.captureStream(60);
   if (recDest) for (const tr of recDest.stream.getAudioTracks()) stream.addTrack(tr);
-  const mime = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"].find(m => MediaRecorder.isTypeSupported(m));
-  recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
+  // 아이폰 사파리는 mp4, 크롬/데스크톱은 webm 으로 녹화됨 (지원되는 첫 형식 선택)
+  const mime = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find(m => MediaRecorder.isTypeSupported(m));
+  try { recorder = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 12_000_000 } : undefined); }
+  catch (e) { recorder = new MediaRecorder(stream); }
   chunks = [];
   recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
+  recorder.onerror = e => { console.error("녹화 오류", e); };
   recorder.onstop = () => {
-    const blob = new Blob(chunks, { type: mime });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-    a.download = `merge-${presetName}-${Date.now()}.${mime.includes("mp4") ? "mp4" : "webm"}`; a.click();
+    const type = recorder.mimeType || mime || "video/webm";
+    lastBlob = new Blob(chunks, { type }); lastExt = type.includes("mp4") ? "mp4" : "webm";
     recorder = null; btnRec.textContent = "● 녹화"; btnRec.classList.remove("rec");
     setUI(true);                                       // 녹화 끝나면 UI 다시 표시
+    setPaused(true);
+    openSavePanel();
   };
   reset(); setPaused(false);                          // 녹화 시작 = 처음부터
   recorder.start(200);
@@ -867,6 +885,31 @@ function toggleRec() {
   document.getElementById("audioHint").classList.add("hidden");
 }
 btnRec.onclick = toggleRec;
+
+/* ---------- 저장: 아이폰은 공유 시트 → "비디오 저장"으로 앨범에 저장 / 그 외는 파일 다운로드 ---------- */
+let lastBlob = null, lastExt = "webm";
+const savePanel = document.getElementById("savePanel"), savePreview = document.getElementById("savePreview"), saveMsg = document.getElementById("saveMsg"), btnSave = document.getElementById("btnSave");
+function lastFile() { return new File([lastBlob], `merge-${presetName}-${Date.now()}.${lastExt}`, { type: lastBlob.type }); }
+function canShareVideo() { try { return !!(navigator.canShare && navigator.canShare({ files: [lastFile()] })); } catch (e) { return false; } }
+function openSavePanel() {
+  if (!lastBlob) return;
+  savePreview.src = URL.createObjectURL(lastBlob); savePreview.play().catch(() => {});
+  const share = canShareVideo();
+  btnSave.textContent = share ? "📲 사진 앨범에 저장" : "⬇️ 영상 파일 다운로드";
+  saveMsg.textContent = share ? "공유 시트가 뜨면 \"비디오 저장\"을 누르세요" : "이 브라우저는 앨범 직접 저장을 지원하지 않아 파일로 내려받습니다";
+  savePanel.classList.remove("hidden");
+}
+function closeSavePanel() { savePanel.classList.add("hidden"); savePreview.pause(); setPaused(false); }
+btnSave.onclick = async () => {                      // 반드시 탭(사용자 제스처) 안에서 호출해야 iOS 공유 시트가 열림
+  if (!lastBlob) return;
+  if (canShareVideo()) {
+    try { await navigator.share({ files: [lastFile()], title: "Merge game" }); saveMsg.textContent = "저장 완료! 사진 앱에서 확인하세요"; return; }
+    catch (e) { if (e && e.name === "AbortError") return; saveMsg.textContent = "공유 실패: " + (e && e.message ? e.message : e); }
+  }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(lastBlob); a.download = lastFile().name; document.body.appendChild(a); a.click(); a.remove();
+};
+document.getElementById("btnAgain").onclick = () => { closeSavePanel(); toggleRec(); };
+document.getElementById("btnClose").onclick = closeSavePanel;
 canvas.addEventListener("pointerdown", () => { if (ui.classList.contains("hidden")) setUI(true); });   // UI 숨김 중 화면 탭 → 다시 표시
 addEventListener("keydown", e => {
   if (e.key === "h" || e.key === "H") toggleUI();
