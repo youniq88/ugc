@@ -22,24 +22,36 @@
 3. 필요하면 `ffmpeg -i merge-xxx.webm -c:v libx264 -pix_fmt yuv420p out.mp4` 로 변환해서 업로드합니다.
    (아이폰 화면 녹화로 찍어도 됩니다. 캔버스 자체가 9:16 입니다.)
 
+## 디자인 키트
+
+요소 그래픽은 외부 무료 디자인 키트를 씁니다. 한 프리셋은 반드시 한 키트에서만 가져와 스타일을 통일합니다.
+
+- 현재 세 프리셋 모두 **Microsoft Fluent Emoji 3D** (MIT 라이선스) 사용
+  - 저장소: https://github.com/microsoft/fluentui-emoji (`assets/<이름>/3D/<파일>_3d.png`)
+  - 이미지는 GitHub raw 주소에서 불러오고, 실패하면 jsDelivr CDN 주소로 재시도합니다. 처음 열 때 인터넷이 필요합니다.
+- 검토했지만 쓰지 않은 키트: Kenney Planets / Puzzle Pack (CC0, https://github.com/shorepine/kenney 미러). 보석이 96px라 큰 단계에서 흐려져 제외.
+
+프리셋 구성 (모두 9단계):
+
+- planets: 초승달 → 그믐달 → 보름달 → 지구 → 토성 → 태양 → 별 → 빛나는 별 → 블랙홀(검은 구슬)
+- gems: 진주 → 에메랄드 → 사파이어 → 자수정 → 루비 → 주황 다이아 → 파랑 다이아 → 젬스톤 → 왕관
+- fruits: 체리 → 딸기 → 포도 → 귤 → 사과 → 복숭아 → 파인애플 → 멜론 → 수박
+
 ## 단계 요소 바꾸기
 
 `index.html` 상단 `PRESETS` 에서 배열 순서 = 단계 순서입니다. 항목을 추가/삭제/교체하면 됩니다.
 
 ```js
-{ r:36,  shape:"pearl",    colors:["#ffffff","#c9c4d6"], glow:"#ffffff" },   // 코드로 그리는 보석/행성
-{ r:78,  shape:"teardrop", colors:["#ffe08a","#b86a05"], glow:"#ffb02e" },
-{ r:96,  shape:"saturn",   glow:"#f2d28b" },                                 // 행성은 colors 불필요
-{ r:60,  emoji:"🍇", glow:"#b04dff" },                                       // 이모지
-{ r:96,  image:"https://.../logo.png", glow:"#fff" },                        // 이미지(원형 크롭)
+{ r:36, img:"Cherries/3D/cherries_3d.png", glow:"#ff5a7a" },   // 키트(kit) 안의 경로
+{ r:72, image:"https://.../my.png", glow:"#fff", scale:1.1 },   // 직접 URL
+{ r:58, shape:"teardrop", colors:["#ffe08a","#b86a05"], glow:"#ffb02e" }, // 코드로 그리는 도형
 ```
 
-`shape` 로 쓸 수 있는 값: 보석 `pearl` `teardrop` `emerald` `cushion` `brilliant` `star`, 행성 `moon` `mars` `venus` `earth` `neptune` `saturn` `jupiter` `sun` `galaxy` `blackhole`, 기본 유리구슬 `sphere`. 모든 그래픽은 외부 이미지 없이 캔버스로 그려서 기기마다 똑같이 보입니다.
-
+- 새 키트를 쓰려면 `KITS` 에 기본 URL을 추가하고 프리셋의 `kit` 값을 바꿉니다.
 - `r` 은 반지름(px). 단계가 올라갈수록 크게. 낙하 대상 단계는 관 폭(반폭 85px)보다 작아야 합니다.
+- `scale` 은 PNG 여백 보정(기본 1.12). 그림이 충돌 원보다 작거나 크게 보이면 조절합니다.
 - 화면에 이름 텍스트는 표시하지 않습니다. 하단 진행표는 아이콘만 나옵니다.
-- `SETTINGS` 에서 관 안 낙하 속도(`tubeSpeed`)와 요소 간격(`tubeGap`), 처음 몇 단계까지 떨어뜨릴지, 중력, 제목/점수/하단 진행표 표시 여부, 테두리 색을 바꿀 수 있습니다.
-- 기본 프리셋은 모두 7단계입니다. planets(달→화성→지구→토성→목성→태양→블랙홀), gems(진주→에메랄드→자수정→토파즈→사파이어→루비→다이아), fruits(체리→딸기→포도→귤→사과→복숭아→수박).
+- `SETTINGS` 에서 관 안 낙하 속도(`tubeSpeed`)와 요소 간격(`tubeGap`), 처음 몇 단계까지 떨어뜨릴지, 중력, 탄력(`restitution`), 점수/하단 진행표 표시 여부, 테두리 색을 바꿀 수 있습니다.
 - 새 프리셋을 추가하면 우측 상단 드롭다운과 `?preset=` 에 자동으로 나타납니다.
 
 ## 효과음
