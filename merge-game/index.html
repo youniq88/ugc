@@ -44,53 +44,47 @@
        shape  : 그리는 모양
                  보석: "pearl" 진주구슬 / "teardrop" 물방울컷 / "emerald" 에메랄드컷 /
                        "cushion" 쿠션컷 / "brilliant" 라운드컷 / "star" 별
-                 행성: "moon" / "mars" / "venus" / "earth" / "neptune" / "saturn" / "jupiter" / "sun" / "galaxy"
+                 행성: "moon" / "mars" / "venus" / "earth" / "neptune" / "saturn" / "jupiter" / "sun" / "galaxy" / "blackhole"
                  기타: "sphere" 유리구슬 (colors 로 색 지정)
        colors : [밝은색, 어두운색] - 보석/구슬 색
        glow   : 주변에 퍼지는 빛 색상
        emoji  : 이모지로 그릴 때 (shape 대신) / image : 이미지 URL (원형 크롭, 최우선)
    ============================================================ */
 const PRESETS = {
-  planets: {
+  planets: {   // 7단계: 달 → 화성 → 지구 → 토성 → 목성 → 태양 → 블랙홀
     sound: "space",
     items: [
-      { r:36,  shape:"moon",    glow:"#dcd6ff" },
-      { r:48,  shape:"mars",    glow:"#ff6a3d" },
-      { r:62,  shape:"venus",   glow:"#ffc44d" },
-      { r:78,  shape:"earth",   glow:"#4da3ff" },
-      { r:96,  shape:"neptune", glow:"#3d7bff" },
-      { r:116, shape:"saturn",  glow:"#f2d28b" },
-      { r:138, shape:"jupiter", glow:"#ff9e5e" },
-      { r:164, shape:"sun",     glow:"#ffb300" },
-      { r:192, shape:"star",    colors:["#fff7c2","#e0a600"], glow:"#fff176" },
-      { r:224, shape:"galaxy",  glow:"#b388ff" },
+      { r:36,  shape:"moon",      glow:"#dcd6ff" },
+      { r:50,  shape:"mars",      glow:"#ff6a3d" },
+      { r:66,  shape:"earth",     glow:"#4da3ff" },
+      { r:86,  shape:"saturn",    glow:"#f2d28b" },
+      { r:110, shape:"jupiter",   glow:"#ff9e5e" },
+      { r:140, shape:"sun",       glow:"#ffb300" },
+      { r:176, shape:"blackhole", glow:"#ff8a3d" },
     ],
   },
-  gems: {
+  gems: {      // 7단계: 진주 → 에메랄드 → 자수정 → 토파즈 → 사파이어 → 루비 → 다이아
     sound: "crystal",
     items: [
       { r:36,  shape:"pearl",     colors:["#ffffff","#c9c4d6"], glow:"#ffffff" },
-      { r:48,  shape:"emerald",   colors:["#8dffb0","#0a6b2f"], glow:"#2eff7a" },
-      { r:62,  shape:"cushion",   colors:["#e6a8ff","#5a1a8a"], glow:"#c04dff" },
-      { r:78,  shape:"teardrop",  colors:["#ffe08a","#b86a05"], glow:"#ffb02e" },
-      { r:96,  shape:"teardrop",  colors:["#8fa8ff","#1a1fa8"], glow:"#3d5aff" },
-      { r:116, shape:"cushion",   colors:["#ff8a8a","#9a0a1a"], glow:"#ff2a4a" },
-      { r:138, shape:"brilliant", colors:["#ffffff","#7fd8ff"], glow:"#9be7ff" },
-      { r:164, shape:"star",      colors:["#fff3b0","#e0a000"], glow:"#ffd54f" },
+      { r:50,  shape:"emerald",   colors:["#8dffb0","#0a6b2f"], glow:"#2eff7a" },
+      { r:66,  shape:"cushion",   colors:["#e6a8ff","#5a1a8a"], glow:"#c04dff" },
+      { r:86,  shape:"teardrop",  colors:["#ffe08a","#b86a05"], glow:"#ffb02e" },
+      { r:110, shape:"teardrop",  colors:["#8fa8ff","#1a1fa8"], glow:"#3d5aff" },
+      { r:140, shape:"cushion",   colors:["#ff8a8a","#9a0a1a"], glow:"#ff2a4a" },
+      { r:176, shape:"brilliant", colors:["#ffffff","#7fd8ff"], glow:"#9be7ff" },
     ],
   },
-  fruits: {
+  fruits: {    // 7단계
     sound: "juicy",
     items: [
-      { r:34,  emoji:"🍒", glow:"#ff5a7a" },
-      { r:46,  emoji:"🍓", glow:"#ff4d6d" },
-      { r:60,  emoji:"🍇", glow:"#b04dff" },
-      { r:76,  emoji:"🍊", glow:"#ff9d2e" },
-      { r:94,  emoji:"🍎", glow:"#ff3b3b" },
-      { r:114, emoji:"🍑", glow:"#ffb08a" },
-      { r:136, emoji:"🍍", glow:"#ffd54f" },
-      { r:160, emoji:"🍈", glow:"#b8ff7a" },
-      { r:190, emoji:"🍉", glow:"#ff5a5a" },
+      { r:36,  emoji:"🍒", glow:"#ff5a7a" },
+      { r:50,  emoji:"🍓", glow:"#ff4d6d" },
+      { r:66,  emoji:"🍇", glow:"#b04dff" },
+      { r:86,  emoji:"🍊", glow:"#ff9d2e" },
+      { r:110, emoji:"🍎", glow:"#ff3b3b" },
+      { r:140, emoji:"🍑", glow:"#ffb08a" },
+      { r:176, emoji:"🍉", glow:"#ff5a5a" },
     ],
   },
 };
@@ -154,7 +148,7 @@ function randTier() {
   return Math.floor(Math.random() * n);
 }
 function spawn(tier, x, y, vx=0, vy=0, inTube=false) {
-  bodies.push({ id: uid++, tier, r: TIERS[tier].r, x, y, vx, vy, inTube, born: gt, rot: (Math.random()-.5)*.6, av:0 });
+  bodies.push({ id: uid++, tier, r: TIERS[tier].r, x, y, vx, vy, inTube, born: gt });
 }
 // 관 안 줄 간격: 떨어뜨리는 단계 중 가장 큰 지름 + tubeGap
 function dropSpacing() {
@@ -285,11 +279,9 @@ function step(dt) {
       if (b.y > BOWL.neckY) {
         b.inTube = false;
         b.vx = (Math.random() < .5 ? -1 : 1) * (140 + Math.random()*200);
-        b.av = (Math.random()-.5) * 4;
       }
     } else b.vy += g * dt;
     b.x += b.vx * dt; b.y += b.vy * dt;
-    b.rot += b.av * dt; b.av *= 0.98;
     b.vx *= 0.999;
   }
   for (const b of bodies) {
@@ -312,7 +304,6 @@ function step(dt) {
           b.vx -= (1+e) * vn * nx; b.vy -= (1+e) * vn * ny;
           const tx = -ny, ty = nx, vt = b.vx*tx + b.vy*ty;
           b.vx -= vt * 0.08 * tx; b.vy -= vt * 0.08 * ty;
-          b.av += vt * 0.002;
         }
       }
     }
@@ -492,33 +483,60 @@ const SHAPES = {
       g.fillStyle = "rgba(255,240,220,0.3)"; blob(g, r*0.35, r*0.28, r*0.1, r*0.05);
     } });
   },
-  saturn(g, r, t, phase) {
+  saturn(g, r) {                                  // 고리 포함 전체가 반지름 r 안에 들어감
+    const body = r*0.66, rx = r*0.92, ry = r*0.3;
     const ring = (front) => {
-      g.save(); g.rotate(-0.35);
-      g.beginPath(); g.ellipse(0, 0, r*1.85, r*0.5, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI*2);
-      const rg = g.createLinearGradient(-r*1.85, 0, r*1.85, 0);
-      rg.addColorStop(0, "rgba(255,230,180,0.2)"); rg.addColorStop(0.5, "rgba(255,240,210,0.95)"); rg.addColorStop(1, "rgba(255,230,180,0.2)");
-      g.strokeStyle = rg; g.lineWidth = r*0.32; g.stroke();
-      g.beginPath(); g.ellipse(0, 0, r*1.55, r*0.42, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI*2);
-      g.strokeStyle = "rgba(120,80,40,0.55)"; g.lineWidth = r*0.05; g.stroke();
+      g.save(); g.rotate(-0.3);
+      g.beginPath(); g.ellipse(0, 0, rx, ry, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI*2);
+      const rg = g.createLinearGradient(-rx, 0, rx, 0);
+      rg.addColorStop(0, "rgba(255,230,180,0.35)"); rg.addColorStop(0.5, "rgba(255,244,220,0.98)"); rg.addColorStop(1, "rgba(255,230,180,0.35)");
+      g.strokeStyle = rg; g.lineWidth = r*0.15; g.stroke();
+      g.beginPath(); g.ellipse(0, 0, rx*0.84, ry*0.84, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI*2);
+      g.strokeStyle = "rgba(110,70,30,0.6)"; g.lineWidth = r*0.03; g.stroke();
       g.restore();
     };
     ring(false);
-    drawSphere(g, r, ["#fff1cf", "#b8863a"], { detail(g, r) { bands(g, r, ["#e9c98f", "#c99a55", "#f6e3bd"], 9, 0.45); } });
+    drawSphere(g, body, ["#fff1cf", "#b8863a"], { detail(g, r) { bands(g, r, ["#e9c98f", "#c99a55", "#f6e3bd"], 9, 0.45); } });
     ring(true);
   },
-  sun(g, r) {
-    g.save();
-    for (let i = 0; i < 18; i++) {                            // 코로나 광선
-      const q = i * Math.PI*2/18, len = r * (1.22 + (i%2)*0.14);
-      g.beginPath(); g.moveTo(Math.cos(q - 0.09)*r*0.95, Math.sin(q - 0.09)*r*0.95); g.lineTo(Math.cos(q)*len, Math.sin(q)*len); g.lineTo(Math.cos(q + 0.09)*r*0.95, Math.sin(q + 0.09)*r*0.95); g.closePath();
-      g.fillStyle = "rgba(255,190,60,0.55)"; g.fill();
+  sun(g, r) {                                     // 코로나 포함 전체가 반지름 r 안에 들어감
+    const body = r*0.86;
+    const cg = g.createRadialGradient(0, 0, body*0.9, 0, 0, r);   // 부드러운 코로나
+    cg.addColorStop(0, "rgba(255,200,80,0.9)"); cg.addColorStop(0.5, "rgba(255,140,30,0.45)"); cg.addColorStop(1, "rgba(255,100,0,0)");
+    g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fillStyle = cg; g.fill();
+    for (let i = 0; i < 20; i++) {                            // 코로나 광선
+      const q = i * Math.PI*2/20, len = r * (0.93 + (i%2)*0.07);
+      g.beginPath(); g.moveTo(Math.cos(q - 0.1)*body*0.96, Math.sin(q - 0.1)*body*0.96); g.lineTo(Math.cos(q)*len, Math.sin(q)*len); g.lineTo(Math.cos(q + 0.1)*body*0.96, Math.sin(q + 0.1)*body*0.96); g.closePath();
+      g.fillStyle = "rgba(255,200,70,0.7)"; g.fill();
     }
-    g.restore();
-    drawSphere(g, r, ["#fff6c0", "#ff8a00"], { noGloss: true, detail(g, r) {
+    drawSphere(g, body, ["#fff6c0", "#ff8a00"], { noGloss: true, detail(g, r) {
       g.fillStyle = "rgba(255,120,0,0.35)"; blob(g, -r*0.3, r*0.2, r*0.35, r*0.2, 0.5); blob(g, r*0.35, -r*0.25, r*0.25, r*0.18, -0.3); blob(g, r*0.1, r*0.5, r*0.2, r*0.1);
       const core = g.createRadialGradient(-r*0.2, -r*0.2, 0, 0, 0, r); core.addColorStop(0, "rgba(255,255,230,0.9)"); core.addColorStop(0.5, "rgba(255,230,120,0)"); g.fillStyle = core; g.fillRect(-r, -r, 2*r, 2*r);
     } });
+  },
+  blackhole(g, r) {                               // 강착 원반 + 광자 고리 + 검은 중심
+    const hole = r*0.42, rx = r*0.95, ry = r*0.28;
+    const warp = g.createRadialGradient(0, 0, hole, 0, 0, r);
+    warp.addColorStop(0, "rgba(255,190,90,0.7)"); warp.addColorStop(0.4, "rgba(255,90,30,0.25)"); warp.addColorStop(1, "rgba(120,40,140,0)");
+    g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fillStyle = warp; g.fill();
+    const disk = (front) => {
+      g.save(); g.rotate(-0.25);
+      const dg = g.createLinearGradient(-rx, 0, rx, 0);
+      dg.addColorStop(0, "rgba(255,120,40,0.15)"); dg.addColorStop(0.25, "rgba(255,170,60,0.9)"); dg.addColorStop(0.5, "rgba(255,245,220,1)"); dg.addColorStop(0.75, "rgba(255,170,60,0.9)"); dg.addColorStop(1, "rgba(255,120,40,0.15)");
+      g.beginPath(); g.ellipse(0, 0, rx, ry, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI*2);
+      g.strokeStyle = dg; g.lineWidth = r*0.2; g.lineCap = "round"; g.stroke();
+      g.beginPath(); g.ellipse(0, 0, rx*0.86, ry*0.86, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI*2);
+      g.strokeStyle = "rgba(255,255,240,0.55)"; g.lineWidth = r*0.035; g.stroke();
+      g.restore();
+    };
+    disk(false);
+    g.save(); g.shadowColor = "rgba(255,200,120,0.9)"; g.shadowBlur = r*0.25;                 // 광자 고리
+    g.beginPath(); g.arc(0, 0, hole*1.08, 0, Math.PI*2); g.strokeStyle = "rgba(255,230,180,0.95)"; g.lineWidth = r*0.05; g.stroke(); g.restore();
+    g.beginPath(); g.arc(0, 0, hole, 0, Math.PI*2); g.fillStyle = "#000"; g.fill();             // 사건의 지평선
+    const edge = g.createRadialGradient(0, 0, hole*0.7, 0, 0, hole);
+    edge.addColorStop(0, "rgba(0,0,0,0)"); edge.addColorStop(1, "rgba(255,140,60,0.35)");
+    g.beginPath(); g.arc(0, 0, hole, 0, Math.PI*2); g.fillStyle = edge; g.fill();
+    disk(true);
   },
   galaxy(g, r) {
     const disc = g.createRadialGradient(0, 0, 0, 0, 0, r); disc.addColorStop(0, "#fff6ff"); disc.addColorStop(0.18, "#c9a6ff"); disc.addColorStop(0.55, "#4a2a9a"); disc.addColorStop(1, "rgba(20,10,50,0)");
@@ -537,13 +555,13 @@ const SHAPES = {
   },
 };
 function makeSprite(t) {
-  const r = t.r, ext = t.shape === "saturn" ? 1.9 : (t.shape === "sun" ? 1.4 : 1.05);
+  const r = t.r, ext = 1.05;
   const pad = Math.round(36 + r*0.35), S = Math.ceil((r*ext + pad) * 2);
   const c = document.createElement("canvas"); c.width = c.height = S;
   const g = c.getContext("2d"); g.translate(S/2, S/2);
   const img = t.image && imgCache[t.image];
   // 바깥 글로우 (두 겹)
-  const soft = t.emoji || img || t.shape === "star";
+  const soft = t.emoji || img || t.shape === "star" || t.shape === "sun" || t.shape === "blackhole";
   const halo = soft ? 0.5 : 0.85, haloR = soft ? r*0.72 : r*0.92;
   g.save(); g.shadowColor = t.glow || "#fff"; g.shadowBlur = pad; g.fillStyle = t.glow || "#fff";
   g.beginPath(); g.arc(0, 0, haloR, 0, Math.PI*2); g.globalAlpha = halo; g.fill(); g.shadowBlur = pad*0.45; g.fill(); g.restore();
@@ -608,7 +626,7 @@ function drawBody(b) {
   const t = TIERS[b.tier], sp = sprite(t);
   let s = 1;
   if (b.pop) { b.pop = Math.max(0, b.pop - 0.08); s = 1 + Math.sin(b.pop*Math.PI) * 0.28; }
-  ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.rot); ctx.scale(s, s);
+  ctx.save(); ctx.translate(b.x, b.y); ctx.scale(s, s);   // 회전 없음: 조명 방향 고정
   ctx.drawImage(sp, -sp.width/2, -sp.height/2);
   ctx.restore();
 }

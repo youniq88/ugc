@@ -34,7 +34,7 @@
 { r:96,  image:"https://.../logo.png", glow:"#fff" },                        // 이미지(원형 크롭)
 ```
 
-`shape` 로 쓸 수 있는 값: 보석 `pearl` `teardrop` `emerald` `cushion` `brilliant` `star`, 행성 `moon` `mars` `venus` `earth` `neptune` `saturn` `jupiter` `sun` `galaxy`, 기본 유리구슬 `sphere`. 모든 그래픽은 외부 이미지 없이 캔버스로 그려서 기기마다 똑같이 보입니다.
+`shape` 로 쓸 수 있는 값: 보석 `pearl` `teardrop` `emerald` `cushion` `brilliant` `star`, 행성 `moon` `mars` `venus` `earth` `neptune` `saturn` `jupiter` `sun` `galaxy` `blackhole`, 기본 유리구슬 `sphere`. 모든 그래픽은 외부 이미지 없이 캔버스로 그려서 기기마다 똑같이 보입니다.
 
 - `r` 은 반지름(px). 단계가 올라갈수록 크게. 낙하 대상 단계는 관 폭(반폭 85px)보다 작아야 합니다.
 - 화면에 이름 텍스트는 표시하지 않습니다. 하단 진행표는 아이콘만 나옵니다.
