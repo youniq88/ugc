@@ -13,7 +13,7 @@
 
 - `?preset=planets` / `gems` / `fruits` : 프리셋 선택 (URL 파라미터)
 - `?ui=0` : 버튼 UI 숨긴 채 시작
-- 단축키 `H` UI 숨기기/보이기, `R` 녹화 시작/중지, `스페이스` 다시 시작
+- 단축키 `스페이스`/`P` 일시정지·재개, `H` UI 숨기기/보이기, `R` 녹화 시작/중지(시작하면 UI 자동 숨김, 끝나면 다시 표시), `Enter` 다시 시작
 
 ## 릴스용 영상 뽑기
 
@@ -27,12 +27,17 @@
 `index.html` 상단 `PRESETS` 에서 배열 순서 = 단계 순서입니다. 항목을 추가/삭제/교체하면 됩니다.
 
 ```js
-{ name:"달",   r:36,  colors:["#f4f2ff","#7f7f9c"], glow:"#dcd6ff" },  // 그라데이션 구슬
-{ name:"지구", r:78,  emoji:"🌍", glow:"#4da3ff" },                    // 이모지
-{ name:"로고", r:96,  image:"https://.../logo.png", glow:"#fff" },      // 이미지(원형 크롭)
+{ r:36,  shape:"pearl",    colors:["#ffffff","#c9c4d6"], glow:"#ffffff" },   // 코드로 그리는 보석/행성
+{ r:78,  shape:"teardrop", colors:["#ffe08a","#b86a05"], glow:"#ffb02e" },
+{ r:96,  shape:"saturn",   glow:"#f2d28b" },                                 // 행성은 colors 불필요
+{ r:60,  emoji:"🍇", glow:"#b04dff" },                                       // 이모지
+{ r:96,  image:"https://.../logo.png", glow:"#fff" },                        // 이미지(원형 크롭)
 ```
 
+`shape` 로 쓸 수 있는 값: 보석 `pearl` `teardrop` `emerald` `cushion` `brilliant` `star`, 행성 `moon` `mars` `venus` `earth` `neptune` `saturn` `jupiter` `sun` `galaxy`, 기본 유리구슬 `sphere`. 모든 그래픽은 외부 이미지 없이 캔버스로 그려서 기기마다 똑같이 보입니다.
+
 - `r` 은 반지름(px). 단계가 올라갈수록 크게. 낙하 대상 단계는 관 폭(반폭 85px)보다 작아야 합니다.
+- 화면에 이름 텍스트는 표시하지 않습니다. 하단 진행표는 아이콘만 나옵니다.
 - `SETTINGS` 에서 관 안 낙하 속도(`tubeSpeed`)와 요소 간격(`tubeGap`), 처음 몇 단계까지 떨어뜨릴지, 중력, 제목/점수/하단 진행표 표시 여부, 테두리 색을 바꿀 수 있습니다.
 - 새 프리셋을 추가하면 우측 상단 드롭다운과 `?preset=` 에 자동으로 나타납니다.
 
