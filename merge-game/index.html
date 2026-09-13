@@ -1561,10 +1561,10 @@ function render() {
   }
   if (SETTINGS.showLegend) drawLegend();
   if (ashDim > 0.01) { ctx.fillStyle = `rgba(96,92,86,${ashDim*0.5})`; ctx.fillRect(0,0,W,H); }   // 잿빛으로 내려앉는 화면
-  if (nightDim > 0.01) { ctx.fillStyle = `rgba(18,28,66,${nightDim*0.42})`; ctx.fillRect(0,0,W,H); }   // 푸른 밤으로 내려앉는 화면
+  if (nightDim > 0.01) { ctx.fillStyle = `rgba(22,34,78,${nightDim*0.24})`; ctx.fillRect(0,0,W,H); }   // 푸른 밤으로 내려앉는 화면 (인형이 묻히지 않게 옅게)
   if (moon) {                                                   // 떠오르는 보름달 (밤 색보다 위에 그려서 환하게)
-    const u = 1 - Math.pow(1 - moon.t, 3), R = 300 * (0.8 + 0.2*u);
-    const mx = W*0.74, my = 640 - 380*u;
+    const u = 1 - Math.pow(1 - moon.t, 3), R = 360 * (0.8 + 0.2*u);
+    const mx = W*0.72, my = 700 - 430*u;
     ctx.save(); ctx.globalAlpha = Math.min(1, moon.t*1.6);
     ctx.drawImage(moonSprite(), mx - R, my - R, R*2, R*2);
     ctx.restore();
