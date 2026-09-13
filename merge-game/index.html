@@ -141,8 +141,8 @@ const PRESETS = {
       { r:190, img:"3b1fb27b-c1f5-42c9-a594-c24ccc2df71d.png", glow:"#ffffff", scale:1.08 },   // 하양 곰
     ],
   },
-  myth: {      // 9단계 신화 생물: 알 → 아기 용 → 늑대 → 유니콘 → 그리핀 → 피닉스 → 드래곤 → 크라켄 → 신
-    kit: "myth", sound: "epic",
+  myth: {      // 9단계 신화 생물: 알 → 아기 용 → 늑대 → 유니콘 → 그리핀 → 피닉스 → 드래곤 → 크라켄 → 제우스
+    kit: "myth", sound: "epic", finale: "lightning",   // 제우스가 나오면 번개로 나머지를 모두 태움
     items: [
       { r:36,  img:"ce9adfe7-3275-4318-a803-99fb7ce98dc0.png", glow:"#ffd24a", scale:1.08 },   // 황금 알
       { r:46,  img:"d90743f5-df72-4711-a11c-11ce6891ec1a.png", glow:"#6de3a0", scale:1.08 },   // 아기 용
@@ -248,8 +248,9 @@ const params = new URLSearchParams(location.search);
 let presetName = params.get("preset") in PRESETS ? params.get("preset") : SETTINGS.preset;
 let TIERS = PRESETS[presetName].items;
 
-let bodies = [], particles = [], popups = [], rings = [], confetti = [];
+let bodies = [], particles = [], popups = [], rings = [], confetti = [], bolts = [], fxQueue = [];
 let ended = false, endedAt = 0;          // 마지막 단계 도달 후 정지 상태
+let burnAll = false;                     // 번개 피날레 진행 중 (이때는 더 이상 합체하지 않음)
 let score = 0, nextTier = 0, lastDrop = 0, overSince = 0, flash = 0, shake = 0;
 let gt = 0;                 // 게임 시계(ms) - 일시정지 중엔 멈춤
 let paused = false;
@@ -283,7 +284,7 @@ function loadImages() {
   return Promise.race([Promise.all(jobs), new Promise(r => setTimeout(r, 6000))]);
 }
 function reset() {
-  bodies = []; particles = []; popups = []; rings = []; confetti = []; score = 0; overSince = 0; flash = 0; ended = false;
+  bodies = []; particles = []; popups = []; rings = []; confetti = []; bolts = []; fxQueue = []; score = 0; overSince = 0; flash = 0; ended = false; burnAll = false;
   nextTier = randTier(); lastDrop = gt; melodyIdx = 0;   // 멜로디도 처음부터
 }
 function randTier() {
@@ -516,6 +517,19 @@ const SFX = {
     if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
     this.theme().merge(tier, melodyNext(tier));          // 합칠 때마다 멜로디의 다음 음
   },
+  // 번개: 쩍 하는 방전 + 우르릉 울리는 저음 (k = 0~1 세기)
+  thunder(k = 1) {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    noise({ type: "highpass", f0: 9000, f1: 2200, a: 0.001, d: 0.10 + 0.06*k, vol: 0.16 + 0.12*k });
+    noise({ type: "lowpass", f0: 900, f1: 80, q: 0.7, a: 0.004, d: 0.7 + 0.7*k, vol: 0.14 + 0.22*k, verbAmt: 0.8 });
+    tone({ type: "triangle", f0: 78 - 10*k, f1: 32, a: 0.004, d: 0.5 + 0.5*k, vol: 0.12 + 0.18*k, verbAmt: 0.4 });
+    if (k > 0.7) setTimeout(() => noise({ type: "bandpass", f0: 520, f1: 110, q: 0.6, d: 0.6, vol: 0.13, verbAmt: 1 }), 130 + Math.random()*140);
+  },
+  // 불타 사라질 때의 치익 소리
+  sizzle() {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    noise({ type: "bandpass", f0: 2600, f1: 500, q: 0.8, a: 0.02, d: 0.45, vol: 0.07, verbAmt: 0.3 });
+  },
 };
 ["pointerdown", "keydown", "touchstart"].forEach(ev => addEventListener(ev, initAudio, { passive: true }));
 
@@ -582,7 +596,7 @@ function step(dt) {
       const d2 = dx*dx + dy*dy;
       if (d2 >= rs*rs) continue;
       const d = Math.sqrt(d2) || 1e-6, nx = dx/d, ny = dy/d;
-      if (a.tier === b.tier && !a.dead && !b.dead) { merges.push([a, b]); a.dead = b.dead = true; continue; }
+      if (a.tier === b.tier && !a.dead && !b.dead && !burnAll && a.burn == null && b.burn == null) { merges.push([a, b]); a.dead = b.dead = true; continue; }
       const ma = a.r*a.r, mb = b.r*b.r, tot = ma + mb;
       const pen = rs - d;
       if (Math.abs(nx) < 0.03) { const kick = (Math.random()-.5) * 80; a.vx -= kick; b.vx += kick; }
@@ -628,6 +642,7 @@ function doMerge(a, b) {
   if (next === TIERS.length - 1) finale(x, y, TIERS[next].glow);   // 마지막 요소 탄생!
 }
 // 축하 연출: 큰 폭발 파티클 + 색종이 + 충격파 여러 겹 + 화면 흔들림. 이후 게임 정지 (텍스트 없음)
+// 프리셋에 finale: "lightning" 이 있으면(신화 = 제우스) 색종이 대신 번개 연출로 이어짐
 function finale(x, y, color) {
   ended = true; endedAt = gt; flash = 1; shake = 30;
   const palette = [color, "#ffffff", "#ffd54f", "#ff5a7a", "#4da3ff", "#2eff7a", "#c04dff"];
@@ -636,12 +651,74 @@ function finale(x, y, color) {
     const ang = Math.random()*Math.PI*2, sp = 400 + Math.random()*900;
     particles.push({ x, y, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, life: 1.4, color: palette[i % palette.length], size: 5 + Math.random()*9, spin: Math.random()*Math.PI });
   }
-  for (let i = 0; i < 180; i++) {                                   // 색종이: 위로 팡 터져서 흩날리며 떨어짐
+  if (finaleKind() === "lightning") { lightningFinale(x, y, palette); return; }
+  confettiBurst(x, y, palette);
+  setTimeout(() => SFX.merge(TIERS.length - 1), 0); setTimeout(() => SFX.merge(TIERS.length - 2), 180); setTimeout(() => SFX.merge(TIERS.length - 1), 360);
+}
+function confettiBurst(x, y, palette) {                             // 색종이: 위로 팡 터져서 흩날리며 떨어짐
+  for (let i = 0; i < 180; i++) {
     const ang = -Math.PI/2 + (Math.random()-.5)*2.4, sp = 900 + Math.random()*1300;
     confetti.push({ x, y, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, w: 10 + Math.random()*14, h: 6 + Math.random()*8,
       rot: Math.random()*Math.PI, spin: (Math.random()-.5)*14, color: palette[i % palette.length], life: 4.5, sway: Math.random()*Math.PI*2 });
   }
-  setTimeout(() => SFX.merge(TIERS.length - 1), 0); setTimeout(() => SFX.merge(TIERS.length - 2), 180); setTimeout(() => SFX.merge(TIERS.length - 1), 360);
+}
+// URL ?finale=lightning / ?finale=confetti 로 프리셋 기본값을 덮어쓸 수 있음
+function finaleKind() { return params.get("finale") || PRESETS[presetName].finale || "confetti"; }
+
+/* ---------- 번개 피날레 (제우스) ---------- */
+// 하늘에서 제우스에게 번개가 내리꽂힌 뒤, 제우스가 남은 요소를 가까운 것부터 하나씩 태워 없앰
+function lightningFinale(x, y, palette) {
+  burnAll = true;
+  const zeus = bodies.find(b => b.tier === TIERS.length - 1) || { x, y, r: TIERS[TIERS.length-1].r };
+  later(300, () => {                                                // 1) 하늘에서 내리꽂히는 큰 번개
+    strike(zeus.x + (Math.random()-.5)*140, TUBE.top - 80, zeus.x, zeus.y - zeus.r*0.3, 1.4);
+    flash = 1; shake = 26; SFX.thunder(1);
+  });
+  const targets = bodies.filter(b => b !== zeus)
+    .sort((a, b) => Math.hypot(a.x-zeus.x, a.y-zeus.y) - Math.hypot(b.x-zeus.x, b.y-zeus.y));
+  const gap = targets.length ? Math.min(110, 1150 / targets.length) : 0;
+  targets.forEach((b, i) => later(560 + i*gap, () => {               // 2) 제우스 손끝에서 뻗어 나가는 번개
+    if (b.burn != null) return;
+    strike(zeus.x, zeus.y - zeus.r*0.25, b.x, b.y, 0.6);
+    ignite(b); shake = Math.max(shake, 7); flash = Math.max(flash, 0.22);
+    SFX.thunder(0.3); SFX.sizzle();
+  }));
+  later(560 + targets.length*gap + 700, () => {                      // 3) 제우스만 남으면 승리 연출
+    confettiBurst(zeus.x, zeus.y, palette);
+    for (let i = 0; i < 3; i++) rings.push({ x: zeus.x, y: zeus.y, r0: 140 + i*70, color: palette[i], t: -i*0.16 });
+    flash = 0.8; shake = 20;
+    SFX.merge(TIERS.length - 1); setTimeout(() => SFX.merge(TIERS.length - 1), 200);
+  });
+}
+function later(ms, fn) { fxQueue.push({ at: gt + ms, fn }); }
+// 번개 경로: 시작점에서 끝점까지 가운데가 가장 크게 흔들리는 지그재그
+function boltPath(x0, y0, x1, y1, jag) {
+  const dx = x1-x0, dy = y1-y0, len = Math.hypot(dx, dy) || 1, nx = -dy/len, ny = dx/len;
+  const segs = 9 + Math.floor(Math.random()*6), pts = [[x0, y0]];
+  for (let i = 1; i < segs; i++) {
+    const u = i/segs, o = (Math.random()-.5) * 2 * Math.sin(u*Math.PI) * jag;
+    pts.push([x0 + dx*u + nx*o, y0 + dy*u + ny*o]);
+  }
+  pts.push([x1, y1]);
+  return pts;
+}
+function strike(x0, y0, x1, y1, power = 1) {
+  const jag = Math.max(16, Math.hypot(x1-x0, y1-y0) * 0.11);
+  bolts.push({ pts: boltPath(x0, y0, x1, y1, jag), t: 0, w: 4 + 8*power, color: "#eaf4ff" });
+  for (let i = 0; i < 2; i++)                                        // 곁가지 두 줄
+    bolts.push({ pts: boltPath(x0, y0, x1, y1, jag*1.6), t: -0.08*(i+1), w: 1.5 + 3*power, color: "#9ecbff" });
+}
+function ignite(b) {
+  if (b.burn != null) return;
+  b.burn = 0; b.av += (Math.random()-.5)*7;
+  for (let i = 0; i < 10; i++) ember(b);
+}
+function ember(b) {                                                  // 불똥: 위로 솟았다가 중력에 떨어짐
+  const a = Math.random()*Math.PI*2, r = b.r * (0.25 + Math.random()*0.75);
+  particles.push({ x: b.x + Math.cos(a)*r, y: b.y + Math.sin(a)*r,
+    vx: (Math.random()-.5)*200, vy: -140 - Math.random()*420, life: 0.45 + Math.random()*0.5,
+    color: ["#ffe08a", "#ff9a1f", "#ff3b1f", "#ffffff"][Math.floor(Math.random()*4)],
+    size: 3 + Math.random()*6, spin: Math.random()*Math.PI });
 }
 function burst(x, y, color, r) {
   const n = 14 + Math.floor(r/6);
@@ -900,6 +977,29 @@ function makeSprite(t) {
   return { base: layer(false), light: layer(true), S };
 }
 function sprite(t) { if (!t._sprite) t._sprite = makeSprite(t); return t._sprite; }
+// 불타는 연출용: 숯처럼 그을린 스프라이트와 둥근 불빛을 미리 한 번만 그려 두고 재사용 (매 프레임 필터·블러는 너무 느림)
+function charredSprite(t) {
+  const sp = sprite(t);
+  if (!sp.charred) {
+    const c = document.createElement("canvas"); c.width = c.height = sp.S;
+    const g = c.getContext("2d");
+    g.filter = "brightness(0.3) sepia(1) saturate(2.4) contrast(1.15)";
+    g.drawImage(sp.base, 0, 0); g.drawImage(sp.light, 0, 0);
+    sp.charred = c;
+  }
+  return sp.charred;
+}
+let glowCanvas = null;
+function glowSprite() {
+  if (!glowCanvas) {
+    glowCanvas = document.createElement("canvas"); glowCanvas.width = glowCanvas.height = 256;
+    const g = glowCanvas.getContext("2d");
+    const rg = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    rg.addColorStop(0, "rgba(255,214,140,0.95)"); rg.addColorStop(0.35, "rgba(255,122,31,0.5)"); rg.addColorStop(1, "rgba(255,60,0,0)");
+    g.fillStyle = rg; g.fillRect(0, 0, 256, 256);
+  }
+  return glowCanvas;
+}
 
 /* ---------- 그래픽: 화면 ---------- */
 const STARS = []; for (let i = 0; i < 90; i++) STARS.push([Math.random()*W, Math.random()*H, Math.random()*1.6 + 0.4, Math.random()]);
@@ -951,16 +1051,29 @@ function drawContainer() {
   ctx.drawImage(containerCanvas, 0, 0);
 }
 function drawBody(b) {
-  const t = TIERS[b.tier], sp = sprite(t), h = sp.S/2;
+  const t = TIERS[b.tier], sp = sprite(t), h = sp.S/2, k = b.burn;
   let s = 1;
   if (b.pop) { b.pop = Math.max(0, b.pop - 0.08); s = 1 + Math.sin(b.pop*Math.PI) * 0.28; }
+  if (k != null) s *= 1 + 0.14*Math.sin(Math.min(1, k)*Math.PI) - 0.3*k;   // 번개에 맞아 부풀었다가 오그라듦
   ctx.save(); ctx.translate(b.x, b.y); ctx.scale(s, s);
   if (b.sq) {                                                                             // 젤리: 충돌 방향으로 눌리고 옆으로 퍼짐
     const q = Math.max(-0.35, Math.min(0.35, b.sq * 0.12)), a = b.sqn || Math.PI/2;
     ctx.rotate(a); ctx.scale(1 - q, 1 + q); ctx.rotate(-a);
   }
-  ctx.save(); ctx.rotate(t.noSpin ? 0 : (b.rot || 0)); ctx.drawImage(sp.base, -h, -h); ctx.restore();   // 본체: 물리 회전
-  ctx.drawImage(sp.light, -h, -h);                                                       // 조명: 고정
+  if (k == null) {
+    ctx.save(); ctx.rotate(t.noSpin ? 0 : (b.rot || 0)); ctx.drawImage(sp.base, -h, -h); ctx.restore();   // 본체: 물리 회전
+    ctx.drawImage(sp.light, -h, -h);                                                     // 조명: 고정
+    ctx.restore(); return;
+  }
+  // 타는 중: 뜨겁게 달아올랐다가 숯처럼 그을리며 사라짐
+  const heat = Math.sin(Math.min(1, k)*Math.PI), fade = Math.max(0, 1 - k*k), char = Math.min(1, k*1.6);
+  const gr = b.r * (1.5 + 0.6*heat);
+  ctx.globalAlpha = Math.min(1, 0.3 + 0.55*heat); ctx.drawImage(glowSprite(), -gr, -gr, gr*2, gr*2);   // 불빛
+  ctx.save(); ctx.rotate(t.noSpin ? 0 : (b.rot || 0));
+  ctx.globalAlpha = fade * (1 - char); ctx.drawImage(sp.base, -h, -h);
+  ctx.globalAlpha = fade * char;       ctx.drawImage(charredSprite(t), -h, -h);
+  ctx.restore();
+  ctx.globalAlpha = fade * (1 - char); ctx.drawImage(sp.light, -h, -h);
   ctx.restore();
 }
 function drawLegend() {
@@ -1015,6 +1128,20 @@ function render() {
   }
   if (SETTINGS.showLegend) drawLegend();
   if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash*.6})`; ctx.fillRect(0,0,W,H); flash -= 0.06; }
+  for (const bt of bolts) {                                     // 번개: 흰 섬광보다도 위에 그림 (바깥 광 → 본선 → 흰 심)
+    if (bt.t < 0) continue;
+    const a = Math.max(0, 1 - bt.t) * (0.6 + Math.random()*0.4);
+    ctx.save(); ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.beginPath(); bt.pts.forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+    ctx.strokeStyle = bt.color;                                 // 굵기가 다른 선을 겹쳐 빛나 보이게 (그림자 블러는 무거움)
+    ctx.globalAlpha = a*0.14; ctx.lineWidth = bt.w*5.5; ctx.stroke();
+    ctx.globalAlpha = a*0.34; ctx.lineWidth = bt.w*2.4; ctx.stroke();
+    ctx.globalAlpha = a;      ctx.lineWidth = bt.w; ctx.stroke();
+    ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(1.5, bt.w*0.32); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+
   if (overSince) {
     ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = "#fff"; ctx.font = "900 110px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -1039,6 +1166,19 @@ function loop(now) {
       const stuck = bodies.some(b => b.y - b.r < DANGER_Y && gt - b.born > transitMs + 900);
       if (stuck) { overSince = gt; shake = 20; }
     } else if (gt - overSince > SETTINGS.gameOverHoldMs) reset();
+    fxQueue = fxQueue.filter(e => { if (gt >= e.at) { e.fn(); return false; } return true; });   // 예약해 둔 피날레 연출
+    for (const bt of bolts) bt.t += frame * 6;                   // 번개는 0.17초쯤 번쩍이고 사라짐
+    bolts = bolts.filter(bt => bt.t < 1);
+    if (burnAll) {                                               // 번개에 맞은 요소가 타서 사라짐
+      let gone = false;
+      for (const b of bodies) {
+        if (b.burn == null) continue;
+        b.burn += frame * 1.6;
+        if (Math.random() < 0.4) ember(b);
+        if (b.burn >= 1) { b.dead = true; gone = true; }
+      }
+      if (gone) bodies = bodies.filter(b => !b.dead);
+    }
     for (const c of confetti) { c.vy += 1400*frame; c.vx *= 0.985; c.vy *= 0.99; c.sway += frame*5; c.x += (c.vx + Math.sin(c.sway)*90)*frame; c.y += c.vy*frame; c.rot += c.spin*frame; c.life -= frame; }
     confetti = confetti.filter(c => c.life > 0 && c.y < H + 40);
     for (const p of particles) { p.x += p.vx*frame; p.y += p.vy*frame; p.vy += 1500*frame; p.life -= frame*1.6; p.spin += frame*6; }
