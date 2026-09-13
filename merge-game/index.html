@@ -58,7 +58,7 @@
    - 한 프리셋의 그래픽은 한 디자인 키트에서만 가져와 스타일을 통일합니다.
      kit: "fluent" = Microsoft Fluent Emoji 3D (MIT 라이선스, github.com/microsoft/fluentui-emoji)
           img 값은 assets/ 아래 경로 ("폴더/3D/파일명_3d.png")
-   - 프리셋 속성 sound: 효과음 테마 ("space" 신비로운 / "juicy" 쥬시한 / "crystal" 유리·보석 / "candy" 귀엽고 달콤한 젤리)
+   - 프리셋 속성 sound: 효과음 테마 ("space" 신비로운 / "juicy" 쥬시한 / "crystal" 유리·보석 / "candy" 귀엽고 달콤한 젤리 / "epic" 웅장한 전설)
    - 프리셋 속성 physics: { restitution: 반발계수, wobble: 1 } 로 프리셋별 물리 덮어쓰기 (젤리는 0.88 + 찌그러짐)
    - 항목 속성:
        r      : 반지름(px, 1080x1920 캔버스 기준) - 단계가 올라갈수록 크게
@@ -78,6 +78,10 @@ const KITS = {
   ],
   // 젤리 프리셋 전용: 단색 구미 젤리 9종 (AI 렌더링 후 배경 제거, 512px 투명 PNG, CORS 허용 CDN)
   gummy: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
+  // 신화 프리셋 전용: 광택 3D 이모지풍 신화 생물 9종 (AI 렌더링, 512px 투명 PNG, 같은 CDN)
+  myth: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
   ],
 };
@@ -123,6 +127,20 @@ const PRESETS = {
       { r:134, img:"0f3ae334-93f7-474b-a5c6-baac63dc9923.png", glow:"#9b5bff", scale:1.08 },   // 보라 꽃
       { r:160, img:"19c1aa3d-ca53-4a66-af46-048aea168193.png", glow:"#ff5fb8", scale:1.08 },   // 분홍 물고기
       { r:190, img:"3b1fb27b-c1f5-42c9-a594-c24ccc2df71d.png", glow:"#ffffff", scale:1.08 },   // 하양 곰
+    ],
+  },
+  myth: {      // 9단계 신화 생물: 알 → 아기 용 → 늑대 → 유니콘 → 그리핀 → 피닉스 → 드래곤 → 크라켄 → 신
+    kit: "myth", sound: "epic",
+    items: [
+      { r:36,  img:"ce9adfe7-3275-4318-a803-99fb7ce98dc0.png", glow:"#ffd24a", scale:1.08 },   // 황금 알
+      { r:46,  img:"d90743f5-df72-4711-a11c-11ce6891ec1a.png", glow:"#6de3a0", scale:1.08 },   // 아기 용
+      { r:58,  img:"99767105-e15d-41a7-b262-c28430dc2779.png", glow:"#9ab4ff", scale:1.08 },   // 늑대
+      { r:72,  img:"75d8b66d-308b-4550-9018-3b6cd51d3827.png", glow:"#ff9ad6", scale:1.08 },   // 유니콘
+      { r:90,  img:"db80a339-fb02-4b9f-ac17-b25fe85af643.png", glow:"#ffc46b", scale:1.08 },   // 그리핀
+      { r:110, img:"a4cbb09c-9329-405b-bf26-7f31dd4495b5.png", glow:"#ff6a1f", scale:1.08 },   // 피닉스
+      { r:134, img:"885688fa-426a-402d-b6bf-6218a04c0123.png", glow:"#ff3b3b", scale:1.08 },   // 드래곤
+      { r:160, img:"7e2e604c-f9fb-480a-ab4e-709a8aac78f5.png", glow:"#a55bff", scale:1.08 },   // 크라켄
+      { r:190, img:"42a7ea94-76b5-4a78-a657-b120da41d3a5.png", glow:"#ffe066", scale:1.08 },   // 신
     ],
   },
   fruits: {    // 9단계: 체리 → 딸기 → 포도 → 귤 → 사과 → 복숭아 → 파인애플 → 멜론 → 수박
@@ -333,6 +351,25 @@ const THEMES = {
       setTimeout(() => { noise({ f0: 1400, f1: 3400, q: 3, d: 0.06, vol: 0.08 }); tone({ f0: m.f*4, f1: m.f*4.5, a: 0.002, d: 0.06, vol: 0.05 }); }, 95);   // 뽀글 거품 팝
       if (m.low) tone({ type: "triangle", f0: m.low*0.9, f1: m.low, a: 0.005, d: 0.4, vol: 0.12 });
       if (m.bass) tone({ type: "triangle", f0: m.bass, a: 0.005, d: 0.55, vol: 0.16, verbAmt: 0.3 });
+    },
+  },
+  epic: {       // 신화: 웅장하게 - 묵직한 북소리 타격 + 합칠 때 금관·합창처럼 부풀어 오르는 화음과 깊은 베이스
+    hit(tier, k) {
+      const f = 150 - tier*7;
+      tone({ f0: f*1.6, f1: f*0.7, a: 0.003, d: 0.22, vol: 0.14 + 0.22*k, verbAmt: 0.5 });          // 북 가죽
+      noise({ type: "lowpass", f0: 900, f1: 200, q: 0.7, d: 0.12, vol: 0.06 + 0.16*k, verbAmt: 0.4 }); // 둥 하는 몸통
+      if (k > 0.35) noise({ type: "highpass", f0: 2500, d: 0.03, vol: 0.05*k });                      // 살짝 찰랑
+    },
+    merge(tier, m) {                                   // 멜로디 음: 금관(사각·톱니파 살짝) + 5도·옥타브 합창, 깊은 베이스 드럼
+      tone({ type: "sawtooth", f0: m.f*0.99, f1: m.f, a: 0.06, d: 1.1, vol: 0.06 + tier*0.006, verbAmt: 0.9 });
+      tone({ f0: m.f, a: 0.05, d: 1.4, vol: 0.18 + tier*0.01, verbAmt: 1 });
+      tone({ f0: m.f*1.5, a: 0.08, d: 1.2, vol: 0.07, verbAmt: 1 });
+      tone({ f0: m.f*2, a: 0.1, d: 1.0, vol: 0.05, verbAmt: 1 });
+      setTimeout(() => tone({ type: "triangle", f0: m.f*0.5, a: 0.04, d: 1.3, vol: 0.10, verbAmt: 0.8 }), 90);   // 한 박 늦게 깔리는 저음
+      tone({ f0: 70, f1: 38, a: 0.004, d: 0.5, vol: 0.30 });                                                    // 큰 북
+      noise({ type: "lowpass", f0: 600, f1: 120, q: 0.8, d: 0.3, vol: 0.18, verbAmt: 0.6 });
+      if (m.low) tone({ type: "triangle", f0: m.low, a: 0.05, d: 1.5, vol: 0.10, verbAmt: 0.8 });
+      if (m.bass) tone({ type: "triangle", f0: m.bass*0.5, a: 0.05, d: 1.8, vol: 0.16, verbAmt: 0.7 });
     },
   },
   crystal: {
