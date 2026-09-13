@@ -34,7 +34,7 @@ const base = process.env.GAME_URL || 'http://localhost:8765/index.html';
     const gameSec = await page.evaluate(() => Math.round(gt / 100) / 10);
     console.log(`attempt ${attempt}: images ${imgs}, ${status}, game ${gameSec}s, wall ${Math.round((Date.now() - t0) / 100) / 10}s`);
     if (status === 'cleared') {
-      await page.waitForTimeout(4500);                                             // 축하 연출(번개 피날레 포함)까지 담기
+      await page.waitForTimeout(5500);                                             // 축하 연출(번개·화살 피날레 포함)까지 담기
       const out = await page.evaluate(async () => {
         const stopped = new Promise(res => { const r = recorder, o = r.onstop; r.onstop = () => { o(); res(); }; });
         toggleRec(); await stopped;

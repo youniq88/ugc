@@ -58,7 +58,7 @@
    - 한 프리셋의 그래픽은 한 디자인 키트에서만 가져와 스타일을 통일합니다.
      kit: "fluent" = Microsoft Fluent Emoji 3D (MIT 라이선스, github.com/microsoft/fluentui-emoji)
           img 값은 assets/ 아래 경로 ("폴더/3D/파일명_3d.png")
-   - 프리셋 속성 sound: 효과음 테마 ("space" 신비로운 / "juicy" 쥬시한 / "crystal" 유리·보석 / "candy" 귀엽고 달콤한 젤리 / "epic" 웅장한 전설 / "evolve" 레벨업 게임음 / "nova" 깊고 웅장한 우주 / "cash" 동전 짤랑·금전등록기 / "quake" 땅이 울리는 발소리 / "ruin" 도기·대리석 / "sonar" 물속 소나)
+   - 프리셋 속성 sound: 효과음 테마 ("space" 신비로운 / "juicy" 쥬시한 / "crystal" 유리·보석 / "candy" 귀엽고 달콤한 젤리 / "epic" 웅장한 전설 / "evolve" 레벨업 게임음 / "nova" 깊고 웅장한 우주 / "cash" 동전 짤랑·금전등록기 / "quake" 땅이 울리는 발소리 / "ruin" 도기·대리석 / "sonar" 물속 소나 / "lyre" 리라 현을 튕기는 소리)
    - 프리셋 속성 physics: { restitution: 반발계수, wobble: 1 } 로 프리셋별 물리 덮어쓰기 (젤리는 0.88 + 찌그러짐)
    - 항목 속성:
        r      : 반지름(px, 1080x1920 캔버스 기준) - 단계가 올라갈수록 크게
@@ -94,6 +94,10 @@ const KITS = {
   ],
   // 돈 프리셋 전용: 같은 방식으로 만든 9종
   money: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
+  // 오디세이아 프리셋 전용: 굵은 먹선의 회화풍 코믹 일러스트 9종 (AI 렌더링, 512px 투명 PNG, 같은 CDN)
+  odyssey: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
   ],
 };
@@ -153,6 +157,20 @@ const PRESETS = {
       { r:134, img:"885688fa-426a-402d-b6bf-6218a04c0123.png", glow:"#ff3b3b", scale:1.08 },   // 드래곤
       { r:160, img:"7e2e604c-f9fb-480a-ab4e-709a8aac78f5.png", glow:"#a55bff", scale:1.08 },   // 크라켄
       { r:190, img:"42a7ea94-76b5-4a78-a657-b120da41d3a5.png", glow:"#ffe066", scale:1.08 },   // 신
+    ],
+  },
+  odyssey: {   // 9단계 오디세이아: 트로이 목마 → 로토스 → 키클롭스 → 아가멤논 → 키르케 → 세이렌 → 스킬라 → 카리브디스 → 오디세우스
+    kit: "odyssey", sound: "lyre", finale: "arrow",   // 오디세우스가 나오면 화살 한 발이 나머지를 모두 꿰뚫음
+    items: [
+      { r:36,  img:"e66910bf-72db-4301-9d54-ca6ba69dd1f2.png", glow:"#d9a24a", scale:1.08 },   // 트로이 목마
+      { r:46,  img:"c5cb0f1e-8a29-4762-a80b-e690f42acf88.png", glow:"#ff8fd0", scale:1.08 },   // 로토스 꽃
+      { r:58,  img:"7de35882-97d8-47a6-9eb6-83617e4f9604.png", glow:"#c08a5a", scale:1.08 },   // 키클롭스
+      { r:72,  img:"046f6895-9693-4390-a172-8f9de897f24b.png", glow:"#ff4a3a", scale:1.08 },   // 아가멤논
+      { r:90,  img:"7eb570c9-9e76-4925-9219-6b783bbad41b.png", glow:"#c05cff", scale:1.08 },   // 키르케
+      { r:110, img:"daac4248-f4d3-47bf-ab3f-55b4262b1fec.png", glow:"#7fd3ff", scale:1.08 },   // 세이렌
+      { r:134, img:"45b48d72-5386-49ac-add8-acb42f8226af.png", glow:"#3ac9a0", scale:1.08 },   // 스킬라
+      { r:160, img:"987ba580-6e3a-4a22-8983-285bc39fd425.png", glow:"#4aa0ff", scale:1.08 },   // 카리브디스
+      { r:190, img:"b1d69774-344b-4d68-8c3b-79ac09c676df.png", glow:"#ffd24a", scale:1.08 },   // 오디세우스
     ],
   },
   evolution: { // 9단계 진화: 세포 → 물고기 → 도마뱀 → 공룡 → 원숭이 → 사람(스마트폰 보는 비즈니스맨) → 로봇 → AI → 은하
@@ -248,7 +266,7 @@ const params = new URLSearchParams(location.search);
 let presetName = params.get("preset") in PRESETS ? params.get("preset") : SETTINGS.preset;
 let TIERS = PRESETS[presetName].items;
 
-let bodies = [], particles = [], popups = [], rings = [], confetti = [], bolts = [], fxQueue = [], drifts = [];
+let bodies = [], particles = [], popups = [], rings = [], confetti = [], bolts = [], fxQueue = [], drifts = [], arrows = [];
 let ended = false, endedAt = 0;          // 마지막 단계 도달 후 정지 상태
 let finaleBusy = false;                  // 피날레 진행 중 (이때는 더 이상 합체하지 않음)
 let meteor = null;                       // 떨어지는 운석 (공룡 피날레)
@@ -288,7 +306,7 @@ function loadImages() {
 }
 function reset() {
   bodies = []; particles = []; popups = []; rings = []; confetti = []; bolts = []; fxQueue = []; drifts = []; score = 0; overSince = 0; flash = 0; ended = false;
-  finaleBusy = false; meteor = null; ashFall = false; ashDim = 0; ashDimTo = 0;
+  finaleBusy = false; meteor = null; ashFall = false; ashDim = 0; ashDimTo = 0; arrows = [];
   nextTier = randTier(); lastDrop = gt; melodyIdx = 0;   // 멜로디도 처음부터
 }
 function randTier() {
@@ -522,6 +540,23 @@ const THEMES = {
       if (m.bass) tone({ type: "triangle", f0: m.bass, a: 0.01, d: 1.2, vol: 0.14, verbAmt: 0.5 });
     },
   },
+  lyre: {       // 오디세이아: 리라 현을 튕기는 맑은 소리, 합칠 때 화음을 훑는 스트럼과 낮은 북
+    hit(tier, k) {
+      const f = noteHz(220, TIERS.length - 1 - tier);
+      tone({ type: "triangle", f0: f, a: 0.002, d: 0.35 + 0.2*k, vol: 0.10 + 0.16*k, verbAmt: 0.5 });          // 현
+      tone({ f0: f*2, a: 0.002, d: 0.18, vol: 0.04 + 0.05*k, verbAmt: 0.4 });                                   // 배음
+      noise({ type: "highpass", f0: 5000, f1: 2500, d: 0.02, vol: 0.05 + 0.06*k });                             // 손톱이 현을 스치는 소리
+      if (tier >= 5) tone({ type: "triangle", f0: 90 - tier*4, f1: 50, a: 0.004, d: 0.25, vol: 0.08 + 0.1*k, verbAmt: 0.3 });   // 큰 것은 북까지
+    },
+    merge(tier, m) {                                   // 화음을 아래에서 위로 훑음
+      [1, 1.25, 1.5, 2].forEach((h, i) => setTimeout(() => tone({ type: "triangle", f0: m.f*h, a: 0.002, d: 1.1 - i*0.1, vol: 0.13 - i*0.02, verbAmt: 0.8 }), i*45));
+      tone({ type: "triangle", f0: 80, f1: 42, a: 0.004, d: 0.45, vol: 0.22 });                                 // 가죽 북
+      noise({ type: "lowpass", f0: 500, f1: 120, q: 0.7, d: 0.25, vol: 0.12, verbAmt: 0.5 });
+      noise({ type: "lowpass", f0: 900, f1: 300, q: 0.5, a: 0.3, d: 1.2, vol: 0.05, verbAmt: 1 });               // 뒤로 밀려가는 파도
+      if (m.low) tone({ type: "triangle", f0: m.low, a: 0.02, d: 1.2, vol: 0.09, verbAmt: 0.7 });
+      if (m.bass) tone({ type: "triangle", f0: m.bass*0.5, a: 0.03, d: 1.5, vol: 0.14, verbAmt: 0.6 });
+    },
+  },
   sonar: {      // 심해: 물속에서 길게 울리는 소나 핑
     hit(tier, k) {
       const f = 260 - tier*14;
@@ -617,6 +652,31 @@ const SFX = {
     noise({ type: "highpass", f0: 6000, f1: 1200, a: 0.001, d: 0.09, vol: 0.16 });
     tone({ type: "triangle", f0: 320, f1: 70, a: 0.001, d: 0.22, vol: 0.16, verbAmt: 0.6 });
     noise({ type: "lowpass", f0: 700, f1: 120, q: 0.8, d: 0.25, vol: 0.12, verbAmt: 0.7 });
+  },
+  // 활시위를 당길 때 팽팽하게 삐걱이는 소리
+  bowdraw() {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    tone({ type: "sawtooth", f0: 140, f1: 260, a: 0.15, d: 0.7, vol: 0.05, verbAmt: 0.5 });
+    noise({ type: "bandpass", f0: 700, f1: 1600, q: 8, a: 0.2, d: 0.7, vol: 0.07, verbAmt: 0.4 });
+  },
+  // 시위를 놓는 순간의 팅 소리
+  twang() {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    tone({ type: "triangle", f0: 420, f1: 150, a: 0.001, d: 0.35, vol: 0.22, verbAmt: 0.5 });
+    tone({ type: "sine", f0: 840, f1: 300, a: 0.001, d: 0.12, vol: 0.10 });
+    noise({ type: "highpass", f0: 6000, f1: 2000, a: 0.001, d: 0.05, vol: 0.14 });
+  },
+  // 화살이 공기를 가르는 소리
+  whoosh() {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    noise({ type: "bandpass", f0: 900, f1: 3200, q: 1.5, a: 0.01, d: 0.12, vol: 0.09 });
+  },
+  // 화살이 꽂히는 소리
+  pierce() {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    noise({ type: "highpass", f0: 5000, f1: 1500, a: 0.001, d: 0.06, vol: 0.12 });
+    tone({ type: "triangle", f0: 240, f1: 70, a: 0.001, d: 0.2, vol: 0.16, verbAmt: 0.5 });
+    noise({ type: "lowpass", f0: 800, f1: 150, q: 0.8, d: 0.18, vol: 0.10, verbAmt: 0.5 });
   },
 };
 ["pointerdown", "keydown", "touchstart"].forEach(ev => addEventListener(ev, initAudio, { passive: true }));
@@ -730,7 +790,7 @@ function doMerge(a, b) {
   if (next === TIERS.length - 1) finale(x, y, TIERS[next].glow);   // 마지막 요소 탄생!
 }
 // 축하 연출: 큰 폭발 파티클 + 색종이 + 충격파 여러 겹 + 화면 흔들림. 이후 게임 정지 (텍스트 없음)
-// 프리셋에 finale: "lightning" 이 있으면(신화 = 제우스) 색종이 대신 번개 연출로 이어짐
+// 프리셋에 finale 값이 있으면(신화 = 번개, 오디세이아 = 화살) 색종이 대신 그 연출로 이어짐
 function finale(x, y, color) {
   ended = true; endedAt = gt; flash = 1; shake = 30;
   const palette = [color, "#ffffff", "#ffd54f", "#ff5a7a", "#4da3ff", "#2eff7a", "#c04dff"];
@@ -745,6 +805,7 @@ function finale(x, y, color) {
   if (kind === "meteor")    { meteorFinale(x, y, palette); return; }      // 운석이 떨어져 전부 불탐
   if (kind === "ash")       { ashFinale(x, y, palette); return; }         // 화산재에 덮여 굳음
   if (kind === "implode")   { implodeFinale(x, y, palette); return; }     // 수압에 찌그러져 터짐
+  if (kind === "arrow")     { arrowFinale(x, y, palette); return; }       // 화살 한 발이 전부를 꿰뚫음
   confettiBurst(x, y, palette);
   setTimeout(() => SFX.merge(TIERS.length - 1), 0); setTimeout(() => SFX.merge(TIERS.length - 2), 180); setTimeout(() => SFX.merge(TIERS.length - 1), 360);
 }
@@ -776,12 +837,13 @@ function lightningFinale(x, y, palette) {
     ignite(b); shake = Math.max(shake, 7); flash = Math.max(flash, 0.22);
     SFX.thunder(0.3); SFX.sizzle();
   }));
-  later(560 + targets.length*gap + 700, () => {                      // 3) 제우스만 남으면 승리 연출
-    confettiBurst(zeus.x, zeus.y, palette);
-    for (let i = 0; i < 3; i++) rings.push({ x: zeus.x, y: zeus.y, r0: 140 + i*70, color: palette[i], t: -i*0.16 });
-    flash = 0.8; shake = 20;
-    SFX.merge(TIERS.length - 1); setTimeout(() => SFX.merge(TIERS.length - 1), 200);
-  });
+  later(560 + targets.length*gap + 700, () => crown(zeus, palette));   // 3) 제우스만 남으면 승리 연출
+}
+function crown(b, palette) {                                          // 혼자 남은 주인공의 승리 연출
+  confettiBurst(b.x, b.y, palette);
+  for (let i = 0; i < 3; i++) rings.push({ x: b.x, y: b.y, r0: 140 + i*70, color: palette[i], t: -i*0.16 });
+  flash = 0.8; shake = 20;
+  SFX.merge(TIERS.length - 1); setTimeout(() => SFX.merge(TIERS.length - 1), 200);
 }
 function later(ms, fn) { fxQueue.push({ at: gt + ms, fn }); }
 // 번개 경로: 시작점에서 끝점까지 가운데가 가장 크게 흔들리는 지그재그
@@ -813,6 +875,44 @@ function ember(b) {                                                  // 불똥: 
     color: ["#ffe08a", "#ff9a1f", "#ff3b1f", "#ffffff"][Math.floor(Math.random()*4)],
     size: 3 + Math.random()*6, spin: Math.random()*Math.PI });
 }
+/* ---------- 화살 피날레 (오디세우스) ---------- */
+// 오디세우스가 활시위를 당겼다가 화살 한 발을 쏘고, 그 화살이 가까운 것부터 차례로 남은 요소를 전부 꿰뚫고 지나갑니다.
+// 구혼자들을 한 자리에서 처단한 오디세이아의 결말입니다. 전부 쓰러지면 오디세우스만 남아 승리 연출로 이어집니다.
+function arrowFinale(x, y, palette) {
+  finaleBusy = true;
+  const hero = bodies.find(b => b.tier === TIERS.length - 1) || { x, y, r: TIERS[TIERS.length-1].r };
+  later(220, () => { hero.aim = 0; SFX.bowdraw(); });                 // 1) 시위를 당김 (몸이 뒤로 젖혀지며 떨림)
+  const rest = bodies.filter(b => b !== hero), path = [];             // 2) 화살이 지나갈 순서: 가까운 것부터 이어서
+  let cx = hero.x, cy = hero.y;
+  while (rest.length) {
+    let k = 0, best = Infinity;
+    rest.forEach((b, i) => { const d = Math.hypot(b.x-cx, b.y-cy); if (d < best) { best = d; k = i; } });
+    const b = rest.splice(k, 1)[0]; path.push(b); cx = b.x; cy = b.y;
+  }
+  later(1000, () => {                                                 // 3) 발사
+    hero.aim = null; flash = 0.3; shake = 10; SFX.twang();
+    shoot(hero.x, hero.y - hero.r*0.15, path, 0, palette, hero);
+  });
+}
+function shoot(x0, y0, path, i, palette, hero) {
+  if (i >= path.length) { later(450, () => crown(hero, palette)); return; }
+  const b = path[i], dur = Math.min(0.14, Math.max(0.05, Math.hypot(b.x-x0, b.y-y0) / 4500));
+  arrows.push({ x0, y0, x1: b.x, y1: b.y, t: 0, dur, path, i, palette, hero, life: 1 });
+  SFX.whoosh();
+}
+function arrowHit(a) {                                              // 화살이 꽂힘: 맞은 것은 쓰러지고 화살은 다음 표적으로
+  const b = a.path[a.i];
+  if (b.slain == null) { b.slain = 0; b.av += (Math.random()-.5)*10; }
+  SFX.pierce(); shake = Math.max(shake, 8); flash = Math.max(flash, 0.12);
+  rings.push({ x: b.x, y: b.y, r0: b.r*0.7, color: "#ffd24a", t: 0 });
+  for (let k = 0; k < 12; k++) {                                     // 황금빛 불꽃
+    const ang = Math.random()*Math.PI*2, sp = 200 + Math.random()*500;
+    particles.push({ x: b.x, y: b.y, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, life: 0.6,
+      color: ["#ffffff", "#ffd24a", "#ff8a3a"][k % 3], size: 3 + Math.random()*6, spin: Math.random()*Math.PI });
+  }
+  shoot(b.x, b.y, a.path, a.i + 1, a.palette, a.hero);
+}
+
 /* ---------- 운석 피날레 (공룡) ---------- */
 // 하늘에서 운석이 비스듬히 떨어져 충돌하고, 충돌 지점에서 가까운 것부터 불타 사라집니다.
 // 전부 타고 나면 작은 시조새 한 마리가 날아오릅니다. 새가 공룡의 후손이라는 게 이 프리셋의 마지막 한 줄입니다.
@@ -1247,13 +1347,21 @@ function drawContainer() {
   ctx.drawImage(containerCanvas, 0, 0);
 }
 function drawBody(b) {
-  const t = TIERS[b.tier], sp = sprite(t), h = sp.S/2, k = b.burn, cr = b.crush;
+  const t = TIERS[b.tier], sp = sprite(t), h = sp.S/2, k = b.burn, cr = b.crush, sl = b.slain == null ? null : Math.min(1, b.slain);
   let s = 1;
   if (b.pop) { b.pop = Math.max(0, b.pop - 0.08); s = 1 + Math.sin(b.pop*Math.PI) * 0.28; }
   if (k != null) s *= 1 + 0.14*Math.sin(Math.min(1, k)*Math.PI) - 0.3*k;   // 번개에 맞아 부풀었다가 오그라듦
   if (cr != null) s *= 1 - 0.5*cr;                                         // 수압에 짜부라짐
   ctx.save(); ctx.translate(b.x, b.y); ctx.scale(s, s);
   if (cr != null) ctx.scale(1 - 0.3*cr, 1 + 0.12*cr);                      // 옆에서 눌리는 느낌
+  if (sl != null) {                                                          // 화살에 맞아 움찔했다가 옆으로 쓰러지며 사라짐
+    ctx.scale(1 + 0.18*Math.sin(Math.min(1, sl*2)*Math.PI), 1);
+    ctx.rotate(sl*sl*1.4); ctx.translate(0, sl*b.r*0.5); ctx.globalAlpha = 1 - sl*sl;
+  }
+  if (b.aim != null) {                                                       // 활시위를 당기는 중: 뒤로 젖혀지고 팽팽하게 떨림
+    const q = Math.min(1, b.aim);
+    ctx.rotate(-0.16*q); ctx.translate((Math.random()-.5)*3*q, (Math.random()-.5)*3*q);
+  }
   if (b.sq) {                                                                             // 젤리: 충돌 방향으로 눌리고 옆으로 퍼짐
     const q = Math.max(-0.35, Math.min(0.35, b.sq * 0.12)), a = b.sqn || Math.PI/2;
     ctx.rotate(a); ctx.scale(1 - q, 1 + q); ctx.rotate(-a);
@@ -1269,6 +1377,7 @@ function drawBody(b) {
     }
     ctx.restore();
     if (ash != null) ctx.globalAlpha = 1 - ash;
+    else if (sl != null) ctx.globalAlpha = 1 - sl*sl;
     ctx.drawImage(sp.light, -h, -h);                                                     // 조명: 고정
     ctx.restore(); return;
   }
@@ -1371,6 +1480,20 @@ function render() {
     ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(1.5, bt.w*0.32); ctx.stroke();
     ctx.restore();
   }
+  for (const a of arrows) {                                     // 화살: 빛나는 궤적 + 나무 살대, 쇠촉, 붉은 깃
+    const u = Math.min(1, a.t), hx = a.x0 + (a.x1-a.x0)*u, hy = a.y0 + (a.y1-a.y0)*u;
+    const dx = a.x1-a.x0, dy = a.y1-a.y0, len = Math.hypot(dx, dy) || 1, ux = dx/len, uy = dy/len, al = Math.max(0, a.life);
+    ctx.save(); ctx.lineCap = "round";
+    ctx.strokeStyle = "#ffd24a"; ctx.lineWidth = 10; ctx.globalAlpha = al * 0.25;
+    ctx.beginPath(); ctx.moveTo(a.x0, a.y0); ctx.lineTo(hx, hy); ctx.stroke();               // 궤적
+    ctx.globalAlpha = al;
+    const L = Math.min(150, u*len), tx = hx - ux*L, ty = hy - uy*L;
+    ctx.strokeStyle = "#e8d6a8"; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();   // 살대
+    ctx.strokeStyle = "#c0392b"; ctx.lineWidth = 12; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx + ux*28, ty + uy*28); ctx.stroke();   // 깃
+    ctx.fillStyle = "#3a3a3a"; ctx.beginPath();                                                 // 쇠촉
+    ctx.moveTo(hx + ux*18, hy + uy*18); ctx.lineTo(hx - uy*11, hy + ux*11); ctx.lineTo(hx + uy*11, hy - ux*11); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
   ctx.globalAlpha = 1;
 
   if (overSince) {
@@ -1404,9 +1527,19 @@ function loop(now) {
       meteor.t += frame / meteor.dur;
       if (meteor.t >= 1) meteorImpact(meteor.x1, meteor.y1);
     }
+    for (const a of arrows) {                                    // 날아가는 화살
+      if (a.t < 1) { a.t += frame / a.dur; if (a.t >= 1) { a.t = 1; arrowHit(a); } }
+      else a.life -= frame * 3;                                  // 꽂힌 뒤엔 궤적만 잠깐 남았다 사라짐
+    }
+    arrows = arrows.filter(a => a.life > 0);
     if (finaleBusy) {                                            // 피날레에 걸린 요소들의 진행
       let gone = false;
       for (const b of bodies) {
+        if (b.aim != null) b.aim += frame * 1.3;                 // 시위를 당기는 중
+        if (b.slain != null) {                                   // 화살에 맞아 쓰러짐
+          b.slain += frame * 2.2;
+          if (b.slain >= 1) { b.dead = true; gone = true; }
+        }
         if (b.burn != null) {                                    // 불타 사라짐
           b.burn += frame * 1.6;
           if (Math.random() < 0.4) ember(b);
