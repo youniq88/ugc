@@ -118,6 +118,6 @@
 
 ## 매일 자동 제작·업로드 (Claude Code Routine)
 
-- claude.ai 의 Routine "머지 게임 릴스 매일 자동 제작·업로드" 가 매일 08:00 KST(23:00 UTC) 에 새 세션을 열어, 프리셋을 하루씩 돌아가며 고르고(planets → jelly → myth → evolution → starlife → money → gems → fruits), Higgsfield 샌드박스에서 이 저장소의 `index.html` + `tools/record.js` 로 녹화한 뒤 mp4 를 Higgsfield CDN 에 올리고, Zapier 로 YouTube(쇼츠, 공개)와 Instagram(릴스)에 캡션 하나와 함께 올립니다.
+- claude.ai 의 Routine "머지 게임 릴스 매일 자동 제작·업로드" 가 매일 08:00 KST(23:00 UTC) 에 새 세션을 열어, 프리셋을 하루씩 돌아가며 고르고(planets → jelly → myth → evolution → starlife → money → gems → fruits), Higgsfield 샌드박스에서 이 저장소의 `index.html` + `tools/record.js` 로 녹화한 뒤 mp4 를 Higgsfield CDN 에 올리고, Zapier 로 YouTube(쇼츠, 공개)와 Instagram(릴스)에 캡션 하나와 함께 올립니다. 캡션과 제목은 영어로, 해시태그 없이, 결말을 밝히지 않고 끝까지 보고 싶어지게 씁니다.
 - Routine 세션이 Higgsfield 와 Zapier 도구를 쓰려면 claude.ai Routine 설정에서 두 커넥터를 붙여 두어야 하고, Zapier 에서 YouTube 와 Instagram for Business 계정을 연결해 두어야 합니다. Instagram 은 크리에이터/비즈니스 계정이 페이스북 페이지에 연결되어 있어야 Zapier 가 계정을 찾습니다.
 - 결과(프리셋, 영상 URL, 업로드 링크 또는 오류, 캡션)는 Routine 실행 요약과 푸시 알림으로 옵니다.
