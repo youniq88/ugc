@@ -208,7 +208,7 @@ function loadImages() {
 }
 function reset() {
   bodies = []; particles = []; popups = []; rings = []; confetti = []; score = 0; overSince = 0; flash = 0; ended = false;
-  nextTier = randTier(); lastDrop = gt;
+  nextTier = randTier(); lastDrop = gt; melodyIdx = 0;   // 멜로디도 처음부터
 }
 function randTier() {
   // 관(TUBE)을 통과할 수 있는 크기의 단계만 떨어뜨림
@@ -271,6 +271,17 @@ function noise({ type="bandpass", f0, f1, q=1, a=0.002, d=0.1, vol=0.2, verbAmt=
 }
 const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
 const noteHz = (base, idx) => base * Math.pow(2, PENTA[Math.max(0, Math.min(PENTA.length-1, idx))] / 12);
+/* ---- 합체 멜로디: 합칠 때마다 다음 음이 나와 한 곡이 됨 (모든 프리셋 공통, 음색만 테마별). 다시 시작하면 처음부터 ---- */
+const MELODY = [0,2,4,7, 9,7,4,2, 4,7,9,12, 11,9,7,4, 5,7,9,12, 14,12,9,7, 4,5,7,9, 7,4,2,0];   // 반음 단위 (C장조 32음)
+const CHORDS = [0, 0, 7, 7, 5, 5, 2, 7];      // 4음마다 바뀌는 베이스(코드 근음): I I V V IV IV ii V
+const ROOT_HZ = 261.63;                        // C4
+let melodyIdx = 0;
+function melodyNext(tier) {
+  const i = melodyIdx++ % MELODY.length;
+  const f = ROOT_HZ * Math.pow(2, MELODY[i] / 12);
+  const bass = i % 4 === 0 ? ROOT_HZ / 2 * Math.pow(2, CHORDS[(i / 4 | 0) % CHORDS.length] / 12) : 0;   // 마디 첫 음에 베이스
+  return { f, bass, low: tier >= 4 ? f / 2 : 0 };   // 큰 단계는 한 옥타브 아래 음을 겹쳐 묵직하게
+}
 const THEMES = {
   space: {
     hit(tier, k) {
@@ -279,12 +290,12 @@ const THEMES = {
       tone({ f0: f*2.005, a: 0.01, d: 0.45, vol: 0.04 + 0.05*k, verbAmt: 0.6 });
       tone({ type: "triangle", f0: f*0.5, a: 0.02, d: 0.5, vol: 0.05*k, verbAmt: 0.5 });
     },
-    merge(tier) {
-      const base = noteHz(262, tier);
-      [1, 1.5, 2].forEach((m, i) => setTimeout(() => {
-        tone({ f0: base*m, a: 0.02, d: 1.6, vol: 0.18, verbAmt: 1 });
-        tone({ f0: base*m*2.01, a: 0.02, d: 1.0, vol: 0.06, verbAmt: 1 });
-      }, i*90));
+    merge(tier, m) {                                   // 멜로디 음: 길게 울리는 패드 + 한 옥타브 위 배음
+      tone({ f0: m.f, a: 0.02, d: 1.6, vol: 0.2 + tier*0.01, verbAmt: 1 });
+      tone({ f0: m.f*2.01, a: 0.02, d: 1.0, vol: 0.06, verbAmt: 1 });
+      setTimeout(() => tone({ f0: m.f*1.5, a: 0.02, d: 1.2, vol: 0.07, verbAmt: 1 }), 120);   // 5도 위 잔향
+      if (m.low) tone({ type: "triangle", f0: m.low, a: 0.03, d: 1.4, vol: 0.08, verbAmt: 0.8 });
+      if (m.bass) tone({ type: "triangle", f0: m.bass, a: 0.03, d: 1.8, vol: 0.14, verbAmt: 0.7 });
       noise({ type: "highpass", f0: 1200, f1: 6000, a: 0.05, d: 0.9, vol: 0.05, verbAmt: 1 });
     },
   },
@@ -294,12 +305,13 @@ const THEMES = {
       tone({ f0: f, f1: f*0.35, a: 0.003, d: 0.11, vol: 0.12 + 0.22*k });
       noise({ f0: 1900, f1: 700, q: 1.4, d: 0.07, vol: 0.06 + 0.16*k });
     },
-    merge(tier) {
-      const f = 300 - tier*14;
-      noise({ f0: 2600, f1: 350, q: 0.9, a: 0.005, d: 0.28, vol: 0.32 });
-      tone({ f0: f, f1: 55, a: 0.005, d: 0.32, vol: 0.30 });
-      setTimeout(() => tone({ f0: 1300, f1: 420, a: 0.002, d: 0.06, vol: 0.16 }), 40);
-      setTimeout(() => noise({ f0: 900, f1: 300, q: 2, d: 0.12, vol: 0.12 }), 110);
+    merge(tier, m) {                                   // 멜로디 음: 통통 튀는 마림바 느낌 + 촉촉한 터짐
+      noise({ f0: 2600, f1: 350, q: 0.9, a: 0.005, d: 0.22, vol: 0.22 });
+      tone({ f0: m.f*1.35, f1: m.f, a: 0.003, d: 0.42, vol: 0.30 + tier*0.01 });
+      tone({ type: "triangle", f0: m.f*2, f1: m.f*2, a: 0.003, d: 0.18, vol: 0.10 });
+      if (m.low) tone({ type: "triangle", f0: m.low, a: 0.005, d: 0.4, vol: 0.14 });
+      if (m.bass) tone({ type: "triangle", f0: m.bass, f1: m.bass*0.98, a: 0.005, d: 0.5, vol: 0.18 });
+      setTimeout(() => noise({ f0: 900, f1: 300, q: 2, d: 0.12, vol: 0.10 }), 110);
     },
   },
   crystal: {
@@ -309,12 +321,13 @@ const THEMES = {
       tone({ f0: f*2.76, a: 0.002, d: 0.18, vol: 0.03 + 0.06*k, verbAmt: 0.3 });
       noise({ type: "highpass", f0: 5000, d: 0.02, vol: 0.05*k });
     },
-    merge(tier) {
-      const base = noteHz(880, tier);
-      [1, 1.25, 1.5, 2].forEach((m, i) => setTimeout(() => {
-        tone({ f0: base*m, a: 0.002, d: 1.3, vol: 0.16, verbAmt: 0.9 });
-        tone({ f0: base*m*2.76, a: 0.002, d: 0.5, vol: 0.05, verbAmt: 0.7 });
-      }, i*70));
+    merge(tier, m) {                                   // 멜로디 음: 종소리(기음 + 비화성 배음) 한 옥타브 위
+      const f = m.f * 2;
+      tone({ f0: f, a: 0.002, d: 1.3, vol: 0.17 + tier*0.01, verbAmt: 0.9 });
+      tone({ f0: f*2.76, a: 0.002, d: 0.5, vol: 0.05, verbAmt: 0.7 });
+      setTimeout(() => tone({ f0: f*1.5, a: 0.002, d: 0.9, vol: 0.06, verbAmt: 0.9 }), 70);
+      if (m.low) tone({ f0: m.low*2, a: 0.002, d: 1.0, vol: 0.08, verbAmt: 0.8 });
+      if (m.bass) tone({ type: "triangle", f0: m.bass*2, a: 0.01, d: 1.4, vol: 0.12, verbAmt: 0.8 });
       noise({ type: "highpass", f0: 4000, d: 0.08, vol: 0.12 });
     },
   },
@@ -332,7 +345,7 @@ const SFX = {
   },
   merge(tier) {
     if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
-    this.theme().merge(tier);
+    this.theme().merge(tier, melodyNext(tier));          // 합칠 때마다 멜로디의 다음 음
   },
 };
 ["pointerdown", "keydown", "touchstart"].forEach(ev => addEventListener(ev, initAudio, { passive: true }));
