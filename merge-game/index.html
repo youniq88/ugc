@@ -58,7 +58,7 @@
    - 한 프리셋의 그래픽은 한 디자인 키트에서만 가져와 스타일을 통일합니다.
      kit: "fluent" = Microsoft Fluent Emoji 3D (MIT 라이선스, github.com/microsoft/fluentui-emoji)
           img 값은 assets/ 아래 경로 ("폴더/3D/파일명_3d.png")
-   - 프리셋 속성 sound: 효과음 테마 ("space" 신비로운 / "juicy" 쥬시한 / "crystal" 유리·보석 / "candy" 귀엽고 달콤한 젤리 / "epic" 웅장한 전설)
+   - 프리셋 속성 sound: 효과음 테마 ("space" 신비로운 / "juicy" 쥬시한 / "crystal" 유리·보석 / "candy" 귀엽고 달콤한 젤리 / "epic" 웅장한 전설 / "evolve" 레벨업 게임음)
    - 프리셋 속성 physics: { restitution: 반발계수, wobble: 1 } 로 프리셋별 물리 덮어쓰기 (젤리는 0.88 + 찌그러짐)
    - 항목 속성:
        r      : 반지름(px, 1080x1920 캔버스 기준) - 단계가 올라갈수록 크게
@@ -82,6 +82,10 @@ const KITS = {
   ],
   // 신화 프리셋 전용: 광택 3D 이모지풍 신화 생물 9종 (AI 렌더링, 512px 투명 PNG, 같은 CDN)
   myth: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
+  // 진화 프리셋 전용: 같은 방식으로 만든 9종
+  evolution: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
   ],
 };
@@ -141,6 +145,20 @@ const PRESETS = {
       { r:134, img:"885688fa-426a-402d-b6bf-6218a04c0123.png", glow:"#ff3b3b", scale:1.08 },   // 드래곤
       { r:160, img:"7e2e604c-f9fb-480a-ab4e-709a8aac78f5.png", glow:"#a55bff", scale:1.08 },   // 크라켄
       { r:190, img:"42a7ea94-76b5-4a78-a657-b120da41d3a5.png", glow:"#ffe066", scale:1.08 },   // 신
+    ],
+  },
+  evolution: { // 9단계 진화: 세포 → 물고기 → 도마뱀 → 공룡 → 원숭이 → 사람(스마트폰 보는 비즈니스맨) → 로봇 → AI → 은하
+    kit: "evolution", sound: "evolve",
+    items: [
+      { r:36,  img:"8422344a-f642-4a63-b5e7-acfde7884413.png", glow:"#7dff6a", scale:1.08 },   // 세포
+      { r:46,  img:"87baaa9c-028b-49ef-b76e-502b00ea72dc.png", glow:"#ffa63d", scale:1.08 },   // 물고기
+      { r:58,  img:"885970d9-00cb-4c16-b1b2-633ce076eb9c.png", glow:"#8ce04a", scale:1.08 },   // 도마뱀
+      { r:72,  img:"dcbec9e3-c709-433d-bb43-8607c36e3ce3.png", glow:"#5ccf3a", scale:1.08 },   // 공룡
+      { r:90,  img:"6f58c636-3e92-4774-919f-8006d8ab6871.png", glow:"#d9924a", scale:1.08 },   // 원숭이
+      { r:110, img:"f30c0e93-385f-4d7f-aac6-d85531e570b2.png", glow:"#5a8dff", scale:1.02 },   // 사람 (세로로 긴 전신이라 살짝 작게)
+      { r:134, img:"8cb8fa9e-7bbb-4d06-ad8e-223389738809.png", glow:"#4dd8ff", scale:1.06 },   // 로봇
+      { r:160, img:"d0b600e4-af42-4183-904b-febec07f6d94.png", glow:"#8a5bff", scale:1.08 },   // AI
+      { r:190, img:"0f619c82-97a5-44e4-acda-d4779bd28f0e.png", glow:"#b48cff", scale:1.10 },   // 은하
     ],
   },
   fruits: {    // 9단계: 체리 → 딸기 → 포도 → 귤 → 사과 → 복숭아 → 파인애플 → 멜론 → 수박
@@ -372,6 +390,24 @@ const THEMES = {
       if (m.bass) tone({ type: "triangle", f0: m.bass*0.5, a: 0.05, d: 1.8, vol: 0.16, verbAmt: 0.7 });
     },
   },
+  evolve: {     // 진화: 레트로 게임 레벨업 느낌 - 통통한 8비트 타격 + 합칠 때 위로 올라가는 3음 아르페지오와 반짝임
+    hit(tier, k) {
+      const f = 520 - tier*30;
+      tone({ type: "square", f0: f, f1: f*0.6, a: 0.002, d: 0.07, vol: 0.05 + 0.10*k });               // 8비트 톡
+      tone({ type: "triangle", f0: f*0.5, f1: f*0.4, a: 0.002, d: 0.1, vol: 0.06 + 0.12*k });
+      noise({ f0: 2000, f1: 600, q: 1.5, d: 0.04, vol: 0.03 + 0.06*k });
+    },
+    merge(tier, m) {                                   // 멜로디 음을 근음으로 한 3음 상승 아르페지오 (근음-3도-5도) + 옥타브 반짝 + 베이스
+      [1, 1.26, 1.5].forEach((r, i) => setTimeout(() => {
+        tone({ type: "square", f0: m.f*r, a: 0.003, d: 0.16, vol: 0.07 + tier*0.004 });
+        tone({ type: "triangle", f0: m.f*r, a: 0.003, d: 0.35, vol: 0.14, verbAmt: 0.5 });
+      }, i*70));
+      setTimeout(() => tone({ f0: m.f*2, a: 0.003, d: 0.5, vol: 0.09, verbAmt: 0.8 }), 210);            // 마무리 옥타브
+      setTimeout(() => noise({ type: "highpass", f0: 3000, f1: 8000, d: 0.12, vol: 0.06, verbAmt: 0.6 }), 210);   // 반짝
+      if (m.low) tone({ type: "triangle", f0: m.low, a: 0.005, d: 0.5, vol: 0.10, verbAmt: 0.4 });
+      if (m.bass) tone({ type: "triangle", f0: m.bass, a: 0.005, d: 0.6, vol: 0.16, verbAmt: 0.3 });
+    },
+  },
   crystal: {
     hit(tier, k) {
       const f = Math.max(520, 1700 - tier*110);
@@ -422,13 +458,9 @@ function step(dt) {
   for (const b of bodies) {
     if (b.inTube) {
       b.vy = SETTINGS.tubeSpeed; b.vx = 0; b.x = BOWL.cx;
-      if (b.y > BOWL.neckY) {                       // 그릇으로 진입: 가로 방향 힘을 0.3초에 걸쳐 서서히 (순간 속도 변화 없음)
-        b.inTube = false;
-        b.kick = (Math.random() < .5 ? -1 : 1) * (500 + Math.random()*700); b.kickT = 0.3;
-      }
+      if (b.y > BOWL.neckY) b.inTube = false;      // 그릇으로 진입: 방향을 틀지 않고 그대로 일직선으로 떨어짐
     } else {
       b.vy += g * dt;
-      if (b.kickT > 0) { b.vx += b.kick * dt; b.kickT -= dt; }
     }
     b.x += b.vx * dt; b.y += b.vy * dt;
     b.vx *= 0.999;
