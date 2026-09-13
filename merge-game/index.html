@@ -162,8 +162,8 @@ const PRESETS = {
 /* ---------- 게임 동작 설정 ---------- */
 const SETTINGS = {
   preset: "planets",     // 기본 프리셋 (URL ?preset=gems 로 바꿀 수 있음)
-  tubeSpeed: 620,        // 관 안에서 줄지어 내려오는 속도 (px/s)
-  tubeGap: 40,           // 관 안에서 요소 사이 빈 간격 (px) - 낙하 간격은 여기서 자동 계산
+  tubeSpeed: 950,        // 관 안에서 줄지어 내려오는 속도 (px/s) - 1단계만 떨어뜨리므로 빠르게 (보통 40초 안팎에 클리어)
+  tubeGap: 12,           // 관 안에서 요소 사이 빈 간격 (px) - 낙하 간격은 여기서 자동 계산
   dropTiers: 1,          // 처음 몇 단계까지 랜덤으로 떨어뜨릴지 (1이면 항상 가장 낮은 단계 한 가지만)
   maxTierVanish: true,   // 마지막 단계끼리 합치면 사라지게 (false면 그대로 유지)
   gravity: 2600,         // 중력 (px/s²)
@@ -820,23 +820,28 @@ function containerPathOn(g, inset = 0) {
   g.lineTo(BOWL.cx + half, TUBE.top - 20);
   g.closePath();
 }
+let containerCanvas = null;   // 용기 테두리는 매 프레임 블러를 다시 그리면 무거워서 한 번만 그려 두고 재사용
 function drawContainer() {
-  const grad = ctx.createLinearGradient(0, 0, W, H);
-  grad.addColorStop(0, SETTINGS.ringColors[0]); grad.addColorStop(1, SETTINGS.ringColors[1]);
-  const ang = Math.asin(TUBE.half / BOWL.R);
-  const path = () => {
-    ctx.beginPath();
-    ctx.moveTo(BOWL.cx - TUBE.half, TUBE.top - 20);
-    ctx.lineTo(BOWL.cx - TUBE.half, BOWL.neckY);
-    ctx.arc(BOWL.cx, BOWL.cy, BOWL.R, -Math.PI/2 - ang, -Math.PI/2 + ang, true);
-    ctx.lineTo(BOWL.cx + TUBE.half, TUBE.top - 20);
-  };
-  ctx.save(); ctx.lineCap = "round";
-  path(); ctx.strokeStyle = SETTINGS.ringColors[0]; ctx.globalAlpha = 0.35; ctx.lineWidth = 22; ctx.filter = "blur(10px)"; ctx.stroke();  // 외곽 광
-  ctx.filter = "none"; ctx.globalAlpha = 1;
-  path(); ctx.strokeStyle = grad; ctx.lineWidth = 8; ctx.shadowColor = SETTINGS.ringColors[0]; ctx.shadowBlur = 18; ctx.stroke();
-  ctx.shadowBlur = 0; path(); ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 2.5; ctx.stroke();                            // 하이라이트 선
-  ctx.restore();
+  if (!containerCanvas) {
+    containerCanvas = document.createElement("canvas"); containerCanvas.width = W; containerCanvas.height = H;
+    const g = containerCanvas.getContext("2d");
+    const grad = g.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, SETTINGS.ringColors[0]); grad.addColorStop(1, SETTINGS.ringColors[1]);
+    const ang = Math.asin(TUBE.half / BOWL.R);
+    const path = () => {
+      g.beginPath();
+      g.moveTo(BOWL.cx - TUBE.half, TUBE.top - 20);
+      g.lineTo(BOWL.cx - TUBE.half, BOWL.neckY);
+      g.arc(BOWL.cx, BOWL.cy, BOWL.R, -Math.PI/2 - ang, -Math.PI/2 + ang, true);
+      g.lineTo(BOWL.cx + TUBE.half, TUBE.top - 20);
+    };
+    g.lineCap = "round";
+    path(); g.strokeStyle = SETTINGS.ringColors[0]; g.globalAlpha = 0.35; g.lineWidth = 22; g.filter = "blur(10px)"; g.stroke();  // 외곽 광
+    g.filter = "none"; g.globalAlpha = 1;
+    path(); g.strokeStyle = grad; g.lineWidth = 8; g.shadowColor = SETTINGS.ringColors[0]; g.shadowBlur = 18; g.stroke();
+    g.shadowBlur = 0; path(); g.strokeStyle = "rgba(255,255,255,0.85)"; g.lineWidth = 2.5; g.stroke();                            // 하이라이트 선
+  }
+  ctx.drawImage(containerCanvas, 0, 0);
 }
 function drawBody(b) {
   const t = TIERS[b.tier], sp = sprite(t), h = sp.S/2;
