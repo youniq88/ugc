@@ -6,6 +6,12 @@
 
 - https://merge-game-reels-buskers88-6629s-projects.vercel.app (Vercel, 프로젝트 `merge-game-reels`)
 - 예: `?preset=fruits&ui=0` 을 붙이면 과일 프리셋을 UI 없이 바로 실행
+- 배포는 파일을 통째로 올리지 않고, Vercel 빌드가 이 저장소의 `claude/progressive-merge-game-4ol028` 브랜치에서 `index.html` 을 받아 `public/` 에 놓는 방식입니다. 프로젝트 설정에 아래 두 줄이 들어 있으니, 새로 푸시한 내용을 반영하려면 같은 설정으로 다시 배포하기만 하면 됩니다.
+
+```
+빌드 명령: mkdir -p public && curl -fsSL -o public/index.html https://raw.githubusercontent.com/youniq88/ugc/claude/progressive-merge-game-4ol028/merge-game/index.html && test -s public/index.html
+출력 디렉터리: public
+```
 
 ## 실행
 
