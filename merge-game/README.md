@@ -11,7 +11,7 @@
 
 `merge-game/index.html` 을 브라우저(크롬 권장)로 열면 바로 시작됩니다. 서버 필요 없음.
 
-- `?preset=planets` / `gems` / `fruits` : 프리셋 선택 (URL 파라미터)
+- `?preset=planets` / `gems` / `jelly` / `fruits` : 프리셋 선택 (URL 파라미터)
 - `?ui=0` : 버튼 UI 숨긴 채 시작
 - 단축키 `스페이스`/`P` 일시정지·재개, `H` UI 숨기기/보이기, `R` 녹화 시작/중지(시작하면 UI 자동 숨김, 끝나면 다시 표시), `Enter` 다시 시작
 
@@ -29,15 +29,19 @@
 
 요소 그래픽은 외부 무료 디자인 키트를 씁니다. 한 프리셋은 반드시 한 키트에서만 가져와 스타일을 통일합니다.
 
-- 현재 세 프리셋 모두 **Microsoft Fluent Emoji 3D** (MIT 라이선스) 사용
+- planets / gems / fruits: **Microsoft Fluent Emoji 3D** (MIT 라이선스) 사용
   - 저장소: https://github.com/microsoft/fluentui-emoji (`assets/<이름>/3D/<파일>_3d.png`)
   - 이미지는 GitHub raw 주소에서 불러오고, 실패하면 jsDelivr CDN 주소로 재시도합니다. 처음 열 때 인터넷이 필요합니다.
+- jelly: 단색 구미 젤리 9종. 무료 키트 중에 단색 구미 세트가 없어서 Higgsfield(GPT Image)로 한 세트를 렌더링한 뒤 배경을 제거해 512px 투명 PNG로 만들었습니다.
+  - Higgsfield 미디어 저장소(CloudFront, CORS 허용)에서 불러옵니다. `KITS.gummy` 가 기본 URL, 항목의 `img` 가 파일명입니다.
+  - 원본 시안과 항목 PNG는 Higgsfield 계정의 생성 기록에 남아 있습니다. 다시 뽑거나 색을 바꾸려면 같은 프롬프트에 색만 바꿔 생성하면 됩니다.
 - 검토했지만 쓰지 않은 키트: Kenney Planets / Puzzle Pack (CC0, https://github.com/shorepine/kenney 미러). 보석이 96px라 큰 단계에서 흐려져 제외.
 
 프리셋 구성 (모두 9단계):
 
 - planets: 초승달 → 그믐달 → 보름달 → 지구 → 토성 → 태양 → 별 → 빛나는 별 → 블랙홀(검은 구슬)
 - gems: 진주 → 에메랄드 → 사파이어 → 자수정 → 루비 → 주황 다이아 → 파랑 다이아 → 젬스톤 → 왕관
+- jelly: 빨강 콩 → 주황 물방울 → 노랑 하트 → 초록 별 → 민트 링 → 파랑 큐브 → 보라 꽃 → 분홍 물고기 → 하양 곰 (탄력 3배 체감: 반발 0.88 + 찌그러짐 흔들림)
 - fruits: 체리 → 딸기 → 포도 → 귤 → 사과 → 복숭아 → 파인애플 → 멜론 → 수박
 
 ## 단계 요소 바꾸기

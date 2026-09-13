@@ -72,6 +72,10 @@ const KITS = {
     "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/",
     "https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/",
   ],
+  // 젤리 프리셋 전용: 단색 구미 젤리 9종 (AI 렌더링 후 배경 제거, 512px 투명 PNG, CORS 허용 CDN)
+  gummy: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
 };
 const PRESETS = {
   planets: {   // 9단계: 초승달 → 그믐달 → 보름달 → 지구 → 토성 → 태양 → 혜성 → 빛나는 별 → 블랙홀
@@ -102,19 +106,19 @@ const PRESETS = {
       { r:190, img:"Crown/3D/crown_3d.png",                               glow:"#ffd54f" },
     ],
   },
-  jelly: {     // 9단계 젤리·캔디 (Fluent 3D 키트): 캔디 → 롤리팝 → 당고 → 푸딩 → 도넛 → 컵케이크 → 버블티 → 빙수 → 생일케이크. 탄력 3배 체감(반발 0.88 + 찌그러짐)
-    kit: "fluent", sound: "juicy",
+  jelly: {     // 9단계 단색 구미 젤리: 콩 → 물방울 → 하트 → 별 → 링 → 큐브 → 꽃 → 물고기 → 곰. 탄력 3배 체감(반발 0.88 + 찌그러짐)
+    kit: "gummy", sound: "juicy",
     physics: { restitution: 0.88, wobble: 1 },
     items: [
-      { r:36,  img:"Candy/3D/candy_3d.png",                 glow:"#ff5a7a" },
-      { r:46,  img:"Lollipop/3D/lollipop_3d.png",           glow:"#c04dff" },
-      { r:58,  img:"Dango/3D/dango_3d.png",                 glow:"#ffb3d6" },
-      { r:72,  img:"Custard/3D/custard_3d.png",             glow:"#ffb64d" },
-      { r:90,  img:"Doughnut/3D/doughnut_3d.png",           glow:"#ff8fa8" },
-      { r:110, img:"Cupcake/3D/cupcake_3d.png",             glow:"#ff6fb0" },
-      { r:134, img:"Bubble tea/3D/bubble_tea_3d.png",       glow:"#ffb070" },
-      { r:160, img:"Shaved ice/3D/shaved_ice_3d.png",       glow:"#8fd3ff" },
-      { r:190, img:"Birthday cake/3D/birthday_cake_3d.png", glow:"#ffd54f" },
+      { r:36,  img:"af9ad4ee-077f-4af2-80ae-bdc09776af0d.png", glow:"#ff3b3b", scale:1.08 },   // 빨강 콩
+      { r:46,  img:"38f0d532-76d7-417b-8f33-40cb892ca7ba.png", glow:"#ff8a1f", scale:1.08 },   // 주황 물방울
+      { r:58,  img:"463dc062-15f2-42cf-88b7-6c5aa18b2bec.png", glow:"#ffd21f", scale:1.08 },   // 노랑 하트
+      { r:72,  img:"4c035574-5c83-4a72-a921-73ccd3e68f9d.png", glow:"#5ee05a", scale:1.08 },   // 초록 별
+      { r:90,  img:"c2236dae-5d1a-4d07-bc51-3df65afb2bda.png", glow:"#2fd6c8", scale:1.08 },   // 민트 링
+      { r:110, img:"99193df4-7464-4d54-8bb5-eeefd61a992c.png", glow:"#3b8bff", scale:1.08 },   // 파랑 큐브
+      { r:134, img:"0f3ae334-93f7-474b-a5c6-baac63dc9923.png", glow:"#9b5bff", scale:1.08 },   // 보라 꽃
+      { r:160, img:"19c1aa3d-ca53-4a66-af46-048aea168193.png", glow:"#ff5fb8", scale:1.08 },   // 분홍 물고기
+      { r:190, img:"3b1fb27b-c1f5-42c9-a594-c24ccc2df71d.png", glow:"#ffffff", scale:1.08 },   // 하양 곰
     ],
   },
   fruits: {    // 9단계: 체리 → 딸기 → 포도 → 귤 → 사과 → 복숭아 → 파인애플 → 멜론 → 수박
@@ -541,62 +545,6 @@ function bands(g, r, cols, count, alpha) {
   }
   g.globalAlpha = 1;
 }
-/* ---- 젤리(구미) 질감: 반투명 젤리 + 안쪽 빛 + 설탕 알갱이 + 큰 하이라이트 ---- */
-const JELLY_PATHS = {
-  bean(g, r) { g.save(); g.rotate(-0.5); g.beginPath(); g.roundRect(-r*0.98, -r*0.6, r*1.96, r*1.2, r*0.6); g.restore(); },
-  drop(g, r) { g.beginPath(); g.moveTo(0, -r); g.bezierCurveTo(r*0.55, -r*0.35, r*0.95, r*0.05, r*0.92, r*0.35); g.arc(0, r*0.35, r*0.65, 0.35, Math.PI - 0.35, false); g.bezierCurveTo(-r*0.95, r*0.05, -r*0.55, -r*0.35, 0, -r); g.closePath(); },
-  heart(g, r) { const s = r*0.95; g.beginPath(); g.moveTo(0, s*0.95); g.bezierCurveTo(-s*1.15, s*0.15, -s*0.95, -s*0.95, 0, -s*0.4); g.bezierCurveTo(s*0.95, -s*0.95, s*1.15, s*0.15, 0, s*0.95); g.closePath(); },
-  star(g, r) { g.beginPath(); for (let i = 0; i < 10; i++) { const q = -Math.PI/2 + i*Math.PI/5, rr = i%2 ? r*0.5 : r; i ? g.lineTo(rr*Math.cos(q), rr*Math.sin(q)) : g.moveTo(rr*Math.cos(q), rr*Math.sin(q)); } g.closePath(); },
-  ring(g, r) { g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.arc(0, 0, r*0.42, 0, Math.PI*2, true); },
-  cube(g, r) { g.save(); g.rotate(0.12); g.beginPath(); g.roundRect(-r*0.86, -r*0.86, r*1.72, r*1.72, r*0.34); g.restore(); },
-  flower(g, r) { g.beginPath(); for (let i = 0; i < 6; i++) { const q = i*Math.PI/3; g.moveTo(Math.cos(q)*r*0.6 + r*0.4, Math.sin(q)*r*0.6); g.arc(Math.cos(q)*r*0.6, Math.sin(q)*r*0.6, r*0.4, 0, Math.PI*2); } g.moveTo(r*0.5, 0); g.arc(0, 0, r*0.5, 0, Math.PI*2); },
-  bear(g, r) { g.beginPath();
-    g.moveTo(r*0.36, -r*0.55); g.arc(0, -r*0.5, r*0.36, 0, Math.PI*2);                       // 머리
-    g.moveTo(-r*0.2, -r*0.82); g.arc(-r*0.32, -r*0.8, r*0.14, 0, Math.PI*2); g.moveTo(r*0.46, -r*0.82); g.arc(r*0.32, -r*0.8, r*0.14, 0, Math.PI*2);   // 귀
-    g.moveTo(r*0.46, r*0.3); g.ellipse(0, r*0.3, r*0.46, r*0.56, 0, 0, Math.PI*2);            // 몸
-    g.moveTo(-r*0.42, -r*0.05); g.ellipse(-r*0.58, -r*0.05, r*0.16, r*0.3, 0.5, 0, Math.PI*2); g.moveTo(r*0.74, -r*0.05); g.ellipse(r*0.58, -r*0.05, r*0.16, r*0.3, -0.5, 0, Math.PI*2);   // 팔
-    g.moveTo(-r*0.16, r*0.78); g.ellipse(-r*0.34, r*0.78, r*0.18, r*0.2, 0, 0, Math.PI*2); g.moveTo(r*0.52, r*0.78); g.ellipse(r*0.34, r*0.78, r*0.18, r*0.2, 0, 0, Math.PI*2);   // 다리
-  },
-  rainbow(g, r) { g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); },
-};
-function drawJelly(g, r, t) {
-  const kind = t.jelly || "bean", [c0, c1] = t.colors || ["#ffb3d6", "#ff4fa0"], path = JELLY_PATHS[kind] || JELLY_PATHS.rainbow;
-  const evenOdd = kind === "ring";
-  if (LIGHT_PASS) {                                          // 조명 층: 큰 유광 하이라이트 + 작은 점 + 아래쪽 반사광
-    g.save(); path(g, r); g.clip(evenOdd ? "evenodd" : "nonzero");
-    const hi = g.createRadialGradient(-r*0.32, -r*0.38, 0, -r*0.32, -r*0.38, r*0.7);
-    hi.addColorStop(0, "rgba(255,255,255,0.75)"); hi.addColorStop(0.35, "rgba(255,255,255,0.28)"); hi.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = hi; g.fillRect(-r*1.2, -r*1.2, r*2.4, r*2.4);
-    g.fillStyle = "rgba(255,255,255,0.9)"; g.beginPath(); g.ellipse(-r*0.36, -r*0.46, r*0.2, r*0.1, -0.6, 0, Math.PI*2); g.fill();
-    g.fillStyle = "rgba(255,255,255,0.55)"; g.beginPath(); g.ellipse(-r*0.1, -r*0.64, r*0.07, r*0.04, -0.3, 0, Math.PI*2); g.fill();
-    const lo = g.createRadialGradient(r*0.4, r*0.5, 0, r*0.4, r*0.5, r*0.9);
-    lo.addColorStop(0, "rgba(255,255,255,0.22)"); lo.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = lo; g.fillRect(-r*1.2, -r*1.2, r*2.4, r*2.4);
-    g.restore(); return;
-  }
-  // 본체 층: 진한 테두리는 살짝 키운 밑바탕으로 (겹치는 원들의 내부 선이 생기지 않게)
-  g.save(); g.scale(1.055, 1.055); path(g, r); g.fillStyle = shade(c1, -0.35); g.globalAlpha = 0.8; g.fill(evenOdd ? "evenodd" : "nonzero"); g.restore();
-  g.save(); path(g, r); g.clip(evenOdd ? "evenodd" : "nonzero");
-  if (kind === "rainbow") {                                  // 무지개볼: 동심원 띠
-    const cols = ["#ff5f7a", "#ffa43d", "#ffe04a", "#5ee27a", "#4db5ff", "#9b6bff", "#ff6fd8"];
-    for (let i = cols.length - 1; i >= 0; i--) { g.fillStyle = cols[i]; g.beginPath(); g.arc(0, 0, r*(0.28 + i*0.12), 0, Math.PI*2); g.fill(); }
-    g.fillStyle = "#fff5fb"; g.beginPath(); g.arc(0, 0, r*0.28, 0, Math.PI*2); g.fill();
-  } else {
-    const base = g.createRadialGradient(-r*0.2, -r*0.25, r*0.1, 0, 0, r*1.05);
-    base.addColorStop(0, c0); base.addColorStop(0.6, c1); base.addColorStop(1, shade(c1, -0.25));
-    g.fillStyle = base; g.fillRect(-r*1.2, -r*1.2, r*2.4, r*2.4);
-  }
-  const inner = g.createRadialGradient(0, r*0.1, 0, 0, r*0.1, r*0.95);          // 안쪽에서 비치는 빛 (젤리 투명감)
-  inner.addColorStop(0, "rgba(255,255,255,0.28)"); inner.addColorStop(0.7, "rgba(255,255,255,0.04)"); inner.addColorStop(1, "rgba(0,0,0,0.12)");
-  g.fillStyle = inner; g.fillRect(-r*1.2, -r*1.2, r*2.4, r*2.4);
-  let seed = r * 7 + kind.length * 13; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;   // 설탕 알갱이
-  for (let i = 0; i < 26; i++) { const x = (rnd()*2 - 1) * r, y = (rnd()*2 - 1) * r; g.fillStyle = `rgba(255,255,255,${0.25 + rnd()*0.45})`; g.beginPath(); g.arc(x, y, r*0.016 + rnd()*r*0.02, 0, Math.PI*2); g.fill(); }
-  g.restore();
-  if (kind === "bear") {                                     // 곰 얼굴
-    g.fillStyle = "rgba(60,20,10,0.55)"; g.beginPath(); g.arc(-r*0.13, -r*0.55, r*0.045, 0, Math.PI*2); g.arc(r*0.13, -r*0.55, r*0.045, 0, Math.PI*2); g.fill();
-    g.beginPath(); g.ellipse(0, -r*0.4, r*0.06, r*0.04, 0, 0, Math.PI*2); g.fill();
-  }
-}
 const SHAPES = {
   sphere(g, r, t) { drawSphere(g, r, t.colors || ["#ffffff", "#888888"]); },
   pearl(g, r, t) {
@@ -716,7 +664,6 @@ const SHAPES = {
     g.beginPath(); g.arc(0, 0, hole, 0, Math.PI*2); g.fillStyle = edge; g.fill();
     disk(true);
   },
-  jelly(g, r, t) { drawJelly(g, r, t); },
   galaxy(g, r) {
     if (LIGHT_PASS) return;
     const disc = g.createRadialGradient(0, 0, 0, 0, 0, r); disc.addColorStop(0, "#fff6ff"); disc.addColorStop(0.18, "#c9a6ff"); disc.addColorStop(0.55, "#4a2a9a"); disc.addColorStop(1, "rgba(20,10,50,0)");
@@ -743,7 +690,7 @@ function makeSprite(t) {
     const g = c.getContext("2d"); g.translate(S/2, S/2);
     LIGHT_PASS = light;
     const hasImg = img && img.complete && img.naturalWidth;
-    if (!light && !hasImg && !t.emoji && t.shape !== "blackhole" && t.shape !== "jelly") {   // 코드 도형: 바깥 글로우 원판 (두 겹)
+    if (!light && !hasImg && !t.emoji && t.shape !== "blackhole") {   // 코드 도형: 바깥 글로우 원판 (두 겹)
       const soft = t.shape === "star" || t.shape === "sun";
       const halo = soft ? 0.5 : 0.85, haloR = soft ? r*0.72 : r*0.92;
       g.save(); g.shadowColor = t.glow || "#fff"; g.shadowBlur = pad; g.fillStyle = t.glow || "#fff";
@@ -762,9 +709,6 @@ function makeSprite(t) {
         g.font = `${Math.round(r*1.6)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
         g.save(); g.shadowColor = t.glow || "#fff"; g.shadowBlur = pad*0.8; g.fillText(t.emoji, 0, r*0.08); g.restore(); g.fillText(t.emoji, 0, r*0.08);
       }
-    } else if (t.shape === "jelly") {
-      if (!light) { g.save(); g.shadowColor = t.glow || "#fff"; g.shadowBlur = pad*0.9; g.globalAlpha = 0.7; JELLY_PATHS[t.jelly || "bean"](g, r); g.fillStyle = t.glow || "#fff"; g.fill(); g.restore(); }   // 실루엣 글로우
-      drawJelly(g, r, t);
     } else {
       (SHAPES[t.shape] || SHAPES.sphere)(g, r, t);
     }
