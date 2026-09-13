@@ -11,7 +11,7 @@
 
 `merge-game/index.html` 을 브라우저(크롬 권장)로 열면 바로 시작됩니다. 서버 필요 없음.
 
-- `?preset=planets` / `gems` / `jelly` / `myth` / `evolution` / `starlife` / `fruits` : 프리셋 선택 (URL 파라미터)
+- `?preset=planets` / `gems` / `jelly` / `myth` / `evolution` / `starlife` / `money` / `fruits` : 프리셋 선택 (URL 파라미터)
 - `?ui=0` : 버튼 UI 숨긴 채 시작
 - `?bounce=0.7` : 탄성(튕김 정도, 0~1)을 지정해 시작. UI의 "탄성" 슬라이더로도 실행 중에 바로 바꿀 수 있고, 프리셋을 바꾸면 그 프리셋 기본값으로 돌아갑니다
 - 단축키 `스페이스`/`P` 일시정지·재개, `H` UI 숨기기/보이기, `R` 녹화 시작/중지(시작하면 UI 자동 숨김, 끝나면 다시 표시), `Enter` 다시 시작
@@ -37,7 +37,7 @@
   - Higgsfield 미디어 저장소(CloudFront, CORS 허용)에서 불러옵니다. `KITS.gummy` 가 기본 URL, 항목의 `img` 가 파일명입니다.
 - myth: 신화 생물 9종. 같은 방식으로 Fluent 3D 이모지풍(광택 3D 토이 스타일)의 캐릭터 시트를 먼저 한 장 렌더링해 스타일을 잡고, 그 시트를 참조 이미지로 9종을 각각 투명 배경으로 렌더링했습니다. `KITS.myth` 가 기본 URL입니다.
   - 원본 시안과 항목 PNG는 Higgsfield 계정의 생성 기록에 남아 있습니다. 다시 뽑거나 색을 바꾸려면 같은 프롬프트에 색만 바꿔 생성하면 됩니다.
-- evolution / starlife: 진화 9종, 별의 일생 9종. myth 와 같은 방식(시트 한 장 → 시트를 참조로 9종 렌더링)이고 `KITS.evolution` / `KITS.starlife` 가 기본 URL입니다.
+- evolution / starlife / money: 진화 9종, 별의 일생 9종, 부의 단계 9종. myth 와 같은 방식(시트 한 장 → 시트를 참조로 9종 렌더링)이고 `KITS.evolution` / `KITS.starlife` / `KITS.money` 가 기본 URL입니다.
 - 검토했지만 쓰지 않은 키트: Kenney Planets / Puzzle Pack (CC0, https://github.com/shorepine/kenney 미러). 보석이 96px라 큰 단계에서 흐려져 제외.
 
 프리셋 구성 (모두 9단계):
@@ -48,6 +48,7 @@
 - myth: 황금 알 → 아기 용 → 늑대 → 유니콘 → 그리핀 → 피닉스 → 드래곤 → 크라켄 → 신
 - evolution: 세포 → 물고기 → 도마뱀 → 공룡 → 원숭이 → 스마트폰 보는 비즈니스맨 → 로봇 → AI → 은하
 - starlife: 우주 먼지 → 운석 → 소행성 → 행성 → 적색거성 → 초신성 → 중성자별 → 블랙홀 → 은하
+- money: 동전 → 지폐 다발 → 금괴 → 다이아몬드 → 금고 → 슈퍼카 → 저택 → 요트 → 로켓
 - fruits: 체리 → 딸기 → 포도 → 귤 → 사과 → 복숭아 → 파인애플 → 멜론 → 수박
 
 ## 단계 요소 바꾸기
@@ -78,6 +79,7 @@
 - `epic` : 묵직한 북소리 타격, 합칠 때 금관과 합창처럼 부풀어 오르는 화음과 큰 북 (신화)
 - `evolve` : 8비트 게임 타격음, 합칠 때 위로 올라가는 레벨업 아르페지오 (진화)
 - `nova` : 묵직한 저음 쿵과 바람 소리, 합칠 때 부풀어 오르는 패드와 서브베이스 붐, 별가루 반짝임 (별의 일생)
+- `cash` : 동전 짤랑 타격, 합칠 때 금전등록기 카칭 벨과 동전 쏟아지는 반짝임 (돈)
 
 부딪히는 소리는 세기와 단계(크기)에 따라 음량·음높이가 달라집니다. 합쳐지는 소리는 모든 프리셋 공통으로 **멜로디**를 따릅니다. 합칠 때마다 `MELODY` 의 다음 음이 나와 한 곡이 되고, 4음마다 `CHORDS` 의 베이스가 깔리며, 큰 단계는 한 옥타브 아래 음이 겹칩니다. 음색(패드/마림바/종)만 테마별로 다르고, 다시 시작하면 멜로디도 처음부터입니다. 멜로디는 반음 단위 숫자 배열이라 바꾸면 곡이 바뀝니다.
 `SETTINGS.soundVolume` 으로 크기를 조절하고 0이면 무음입니다. 브라우저 정책상 화면을 한 번 탭해야 소리가 켜지며, `R` 녹화에는 소리도 함께 담깁니다. 새 테마를 만들려면 `THEMES` 에 `hit(tier, k)` / `merge(tier, m)` 함수를 추가하면 됩니다 (`m.f` 멜로디 음, `m.bass` 베이스, `m.low` 옥타브 아래).
@@ -87,4 +89,10 @@
 - 헤드리스 크롬(Playwright)으로 게임을 처음부터 돌려 마지막 요소가 나올 때까지 소리와 함께 녹화하고, 인스타·유튜브 호환 mp4(h264 + aac)로 저장합니다.
 - 게임 시간이 60초를 넘기거나 게임오버가 나면 그 판은 버리고 다시 촬영합니다(기본 4회 시도).
 - 실행: `index.html`이 있는 폴더에서 `python3 -m http.server 8765` 로 띄운 뒤 `node tools/record.js <preset> <out.mp4> [시도 횟수] [최대 게임 초]`. 다른 주소면 `GAME_URL` 환경변수로 지정합니다.
-- ffmpeg 가 설치되어 있어야 합니다. 요소는 항상 1단계만 떨어지고 낙하 속도를 올려 두어 보통 35~50초에 클리어됩니다.
+- ffmpeg 가 설치되어 있어야 합니다. 요소는 항상 1단계만 떨어지고 `tubeSpeed 950 / tubeGap 48` 기준으로 보통 45~55초에 클리어되며, 60초를 넘기는 판은 자동으로 다시 촬영됩니다.
+
+## 매일 자동 제작·업로드 (Claude Code Routine)
+
+- claude.ai 의 Routine "머지 게임 릴스 매일 자동 제작·업로드" 가 매일 08:00 KST(23:00 UTC) 에 새 세션을 열어, 프리셋을 하루씩 돌아가며 고르고(planets → jelly → myth → evolution → starlife → money → gems → fruits), Higgsfield 샌드박스에서 이 저장소의 `index.html` + `tools/record.js` 로 녹화한 뒤 mp4 를 Higgsfield CDN 에 올리고, Zapier 로 YouTube(쇼츠, 공개)와 Instagram(릴스)에 캡션 하나와 함께 올립니다.
+- Routine 세션이 Higgsfield 와 Zapier 도구를 쓰려면 claude.ai Routine 설정에서 두 커넥터를 붙여 두어야 하고, Zapier 에서 YouTube 와 Instagram for Business 계정을 연결해 두어야 합니다. Instagram 은 크리에이터/비즈니스 계정이 페이스북 페이지에 연결되어 있어야 Zapier 가 계정을 찾습니다.
+- 결과(프리셋, 영상 URL, 업로드 링크 또는 오류, 캡션)는 Routine 실행 요약과 푸시 알림으로 옵니다.

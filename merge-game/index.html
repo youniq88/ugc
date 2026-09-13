@@ -58,7 +58,7 @@
    - 한 프리셋의 그래픽은 한 디자인 키트에서만 가져와 스타일을 통일합니다.
      kit: "fluent" = Microsoft Fluent Emoji 3D (MIT 라이선스, github.com/microsoft/fluentui-emoji)
           img 값은 assets/ 아래 경로 ("폴더/3D/파일명_3d.png")
-   - 프리셋 속성 sound: 효과음 테마 ("space" 신비로운 / "juicy" 쥬시한 / "crystal" 유리·보석 / "candy" 귀엽고 달콤한 젤리 / "epic" 웅장한 전설 / "evolve" 레벨업 게임음 / "nova" 깊고 웅장한 우주)
+   - 프리셋 속성 sound: 효과음 테마 ("space" 신비로운 / "juicy" 쥬시한 / "crystal" 유리·보석 / "candy" 귀엽고 달콤한 젤리 / "epic" 웅장한 전설 / "evolve" 레벨업 게임음 / "nova" 깊고 웅장한 우주 / "cash" 동전 짤랑·금전등록기)
    - 프리셋 속성 physics: { restitution: 반발계수, wobble: 1 } 로 프리셋별 물리 덮어쓰기 (젤리는 0.88 + 찌그러짐)
    - 항목 속성:
        r      : 반지름(px, 1080x1920 캔버스 기준) - 단계가 올라갈수록 크게
@@ -90,6 +90,10 @@ const KITS = {
   ],
   // 별의 일생 프리셋 전용: 같은 방식으로 만든 9종
   starlife: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
+  // 돈 프리셋 전용: 같은 방식으로 만든 9종
+  money: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
   ],
 };
@@ -177,6 +181,20 @@ const PRESETS = {
       { r:134, img:"6a1866fd-4de0-422b-922d-815b1a2a41ac.png", glow:"#8ad8ff", scale:1.08 },   // 중성자별
       { r:160, img:"90009165-dcb2-495c-affb-e66bd4d9bb24.png", glow:"#ffb347", scale:1.10, noSpin:true },   // 블랙홀 (기울면 어색해서 회전 없음)
       { r:190, img:"939d945f-db34-4beb-8ffe-372fe21a1da3.png", glow:"#b48cff", scale:1.10 },   // 은하
+    ],
+  },
+  money: {     // 9단계 부의 단계: 동전 → 지폐 → 금괴 → 다이아 → 금고 → 슈퍼카 → 저택 → 요트 → 로켓
+    kit: "money", sound: "cash",
+    items: [
+      { r:36,  img:"0adf935c-d318-4d32-bc96-a7e438e88504.png", glow:"#ffd23f", scale:1.08 },   // 동전
+      { r:46,  img:"c22568c6-08c3-4038-8450-c7c87fe0bfb2.png", glow:"#4dd66a", scale:1.08 },   // 지폐 다발
+      { r:58,  img:"9114e239-88cc-4601-bb6e-1a13bf7412ec.png", glow:"#ffc233", scale:1.10 },   // 금괴
+      { r:72,  img:"9853b140-6668-40ac-baf9-97af47ff5def.png", glow:"#7fd3ff", scale:1.08 },   // 다이아몬드
+      { r:90,  img:"cdca163e-db13-4ee1-96bb-792783831d0a.png", glow:"#b8c4d6", scale:1.08 },   // 금고
+      { r:110, img:"426899af-f918-4882-b691-8fc54436b6d5.png", glow:"#ff3b3b", scale:1.14 },   // 슈퍼카 (납작해서 조금 크게)
+      { r:134, img:"82d1b639-c07f-407a-9daa-48f888b573bd.png", glow:"#ffe9b8", scale:1.10 },   // 저택
+      { r:160, img:"1301f214-c384-4146-ae3e-c8fda89e3428.png", glow:"#4da3ff", scale:1.10 },   // 요트
+      { r:190, img:"f2b037ff-8b59-457b-a310-0ee772c56344.png", glow:"#ff8a3d", scale:1.06 },   // 로켓
     ],
   },
   fruits: {    // 9단계: 체리 → 딸기 → 포도 → 귤 → 사과 → 복숭아 → 파인애플 → 멜론 → 수박
@@ -444,6 +462,25 @@ const THEMES = {
       [2, 3, 4].forEach((r, i) => setTimeout(() => tone({ f0: m.f*r, a: 0.01, d: 0.9 - i*0.15, vol: 0.05 - i*0.01, verbAmt: 1 }), 200 + i*90));
       if (m.low) tone({ type: "triangle", f0: m.low, a: 0.08, d: 1.6, vol: 0.10, verbAmt: 0.8 });
       if (m.bass) tone({ type: "triangle", f0: m.bass*0.5, a: 0.06, d: 2.0, vol: 0.16, verbAmt: 0.7 });
+    },
+  },
+  cash: {       // 돈: 동전 짤랑 타격 + 합칠 때 금전등록기 '카칭' 벨 두 번, 동전 쏟아지는 반짝임, 서랍 쿵
+    hit(tier, k) {
+      const f = 2600 - tier*160;
+      tone({ f0: f, a: 0.001, d: 0.12, vol: 0.05 + 0.12*k, verbAmt: 0.3 });                              // 짤랑
+      tone({ f0: f*1.42, a: 0.001, d: 0.08, vol: 0.03 + 0.06*k, verbAmt: 0.2 });
+      noise({ type: "highpass", f0: 6000, d: 0.02, vol: 0.04 + 0.08*k });                                  // 금속 딸깍
+    },
+    merge(tier, m) {                                   // 멜로디 음 두 옥타브 위 벨을 두 번(카-칭) + 비화성 배음 + 동전 쏟아짐 + 서랍 쿵 + 베이스
+      [0, 90].forEach(t => setTimeout(() => {
+        tone({ f0: m.f*4, a: 0.001, d: 0.6, vol: 0.14 + tier*0.008, verbAmt: 0.7 });
+        tone({ f0: m.f*4*2.76, a: 0.001, d: 0.25, vol: 0.04, verbAmt: 0.5 });
+      }, t));
+      tone({ f0: m.f*2, a: 0.005, d: 0.9, vol: 0.10, verbAmt: 0.8 });
+      [0, 40, 80, 120, 170].forEach((t, i) => setTimeout(() => noise({ type: "highpass", f0: 5000 + i*800, d: 0.03, vol: 0.05 }), 200 + t));   // 동전 쏟아짐
+      noise({ type: "lowpass", f0: 400, f1: 90, q: 0.8, d: 0.2, vol: 0.14 });                              // 서랍 쿵
+      if (m.low) tone({ type: "triangle", f0: m.low, a: 0.005, d: 0.6, vol: 0.09, verbAmt: 0.4 });
+      if (m.bass) tone({ type: "triangle", f0: m.bass, a: 0.005, d: 0.7, vol: 0.15, verbAmt: 0.3 });
     },
   },
   crystal: {
