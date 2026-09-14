@@ -84,6 +84,10 @@ const KITS = {
   gummy: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
   ],
+  // 무기 프리셋 전용: 박물관 전시품 같은 실사 3D 무기 9종 (AI 렌더링, 512px 투명 PNG, 같은 CDN)
+  weapons: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
   // 신화 프리셋 전용: 광택 3D 이모지풍 신화 생물 9종 (AI 렌더링, 512px 투명 PNG, 같은 CDN)
   myth: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
@@ -235,6 +239,20 @@ const PRESETS = {
       { r:190, drawR:380, img:"7e7ed043-8e64-4e45-9ae2-32d40ddba0b9.png", frames:["7e7ed043-8e64-4e45-9ae2-32d40ddba0b9.png","2449d29f-9729-4f4c-a63a-66b70fd73c74.png","f4ccabb7-dc28-4263-9387-ab31528d8d4f.png"], glow:"#ffcf3d", scale:1.10, noSpin:true },   // 여섯 보석이 박힌 황금 건틀릿 (충돌은 190, 그림은 두 배 크게. frames = 손가락을 튕기는 장면)
     ],
   },
+  weapons: {  // 9단계 무기의 역사: 구석기 돌망치 → 반물질 폭탄
+    kit: "weapons", sound: "steel", finale: "annihilate",   // 반물질 폭탄이 나오면 전부 소멸
+    items: [
+      { r:36,  img:"833213bb-da45-4d9e-a0e9-7078bc8d11f1.png", glow:"#b9a68c", scale:1.08 },   // 구석기 돌망치
+      { r:46,  img:"e84fc791-d049-4973-b113-f5f8ad918227.png", glow:"#7fd6a8", scale:1.08 },   // 청동 단검
+      { r:58,  img:"84fd166a-fb80-4f4a-818c-f687baf944bf.png", glow:"#cfe2ff", scale:1.08 },   // 강철 장검
+      { r:72,  img:"8fe6da34-2717-4d11-b512-7dfb9d4a5079.png", glow:"#d7a86a", scale:1.08 },   // 석궁
+      { r:90,  img:"e76fb8af-2538-4287-ba20-ccb466c97c6d.png", glow:"#ffcf8a", scale:1.08 },   // 화승총(머스킷)
+      { r:110, img:"b158526d-caf7-4b55-8f46-b32157e151e3.png", glow:"#a8b58a", scale:1.08 },   // 기관총
+      { r:134, img:"1d15f364-6e12-4976-a9ef-cc6e12c4abc2.png", glow:"#9fd4ff", scale:1.08 },   // 순항 미사일
+      { r:160, img:"6ed55469-ab71-4533-aa29-be853aff4aa0.png", glow:"#ff9a3d", scale:1.08 },   // 핵폭탄
+      { r:190, img:"76760ce3-e754-4be7-b852-a4d317a65c3d.png", glow:"#b27dff", scale:1.10, noSpin:true },   // 반물질 폭탄
+    ],
+  },
   evolution: { // 9단계 진화: 세포 → 물고기 → 도마뱀 → 공룡 → 원숭이 → 사람(스마트폰 보는 비즈니스맨) → 로봇 → AI → 은하
     kit: "evolution", sound: "evolve",
     items: [
@@ -366,6 +384,7 @@ let finaleBusy = false;                  // 피날레 진행 중 (이때는 더 
 let meteor = null;                       // 떨어지는 운석 (공룡 피날레)
 let moon = null;                         // 떠오르는 보름달 (강아지 피날레)
 let voidDim = 0, voidDimTo = 0;          // 블랙홀이 삼킨 뒤 닫히는 화면
+let whiteDim = 0, whiteDimTo = 0, whiteFall = 1.2;   // 반물질 폭발이 화면을 하얗게 채웠다가 빠지는 정도 (빠지는 속도는 따로 잡음)
 let physicsHoldMs = 3000;                // 클리어 후 물리를 더 굴리는 시간 (핑거스냅은 무너지는 걸 보여줘야 해서 길게)
 let nightDim = 0, nightDimTo = 0;        // 푸른 밤으로 내려앉는 화면
 let ashFall = false, ashDim = 0, ashDimTo = 0;   // 화산재 (폼페이 피날레)
@@ -415,7 +434,7 @@ function loadImages() {
 function reset() {
   bodies = []; particles = []; popups = []; rings = []; confetti = []; bolts = []; fxQueue = []; drifts = []; score = 0; overSince = 0; flash = 0; ended = false;
   finaleBusy = false; meteor = null; ashFall = false; ashDim = 0; ashDimTo = 0; arrows = [];
-  moon = null; nightDim = 0; nightDimTo = 0; voidDim = 0; voidDimTo = 0; physicsHoldMs = 3000;
+  moon = null; nightDim = 0; nightDimTo = 0; voidDim = 0; voidDimTo = 0; whiteDim = 0; whiteDimTo = 0; whiteFall = 1.2; physicsHoldMs = 3000;
   nextTier = randTier(); lastDrop = gt; melodyIdx = 0;   // 멜로디도 처음부터
 }
 function randTier() {
@@ -568,6 +587,23 @@ const THEMES = {
       noise({ type: "lowpass", f0: 600, f1: 120, q: 0.8, d: 0.3, vol: 0.18, verbAmt: 0.6 });
       if (m.low) tone({ type: "triangle", f0: m.low, a: 0.05, d: 1.5, vol: 0.10, verbAmt: 0.8 });
       if (m.bass) tone({ type: "triangle", f0: m.bass*0.5, a: 0.05, d: 1.8, vol: 0.16, verbAmt: 0.7 });
+    },
+  },
+  steel: {      // 무기: 쇠붙이 - 부딪히면 금속이 쨍 울리고, 합칠 때 모루를 때리는 듯한 타격과 긴 금속 배음
+    hit(tier, k) {
+      const f = 900 - tier*70;
+      noise({ type: "bandpass", f0: f*2.2, f1: f*0.9, q: 7, a: 0.0008, d: 0.09 + 0.12*k, vol: 0.08 + 0.16*k, verbAmt: 0.45 });
+      tone({ type: "triangle", f0: f, f1: f*0.72, a: 0.001, d: 0.13 + 0.2*k, vol: 0.05 + 0.12*k, verbAmt: 0.4 });
+      if (k > 0.4) tone({ f0: 90 - tier*3, f1: 45, a: 0.002, d: 0.16, vol: 0.10*k });   // 묵직한 몸통
+    },
+    merge(tier, m) {                                   // 멜로디 음: 모루 타격 + 배음이 길게 남는 금속 울림
+      noise({ type: "highpass", f0: 6000, f1: 1800, a: 0.0006, d: 0.07, vol: 0.16 });                          // 쨍
+      tone({ type: "triangle", f0: m.f*2, a: 0.002, d: 1.4, vol: 0.09 + tier*0.006, verbAmt: 1 });
+      tone({ f0: m.f, a: 0.004, d: 1.8, vol: 0.14 + tier*0.008, verbAmt: 0.9 });
+      [2.76, 5.4].forEach((mul, i) => tone({ f0: m.f*mul, a: 0.003, d: 1.2 - i*0.4, vol: 0.05 / (i+1), verbAmt: 1 }));   // 종처럼 어긋난 배음
+      tone({ f0: 80, f1: 42, a: 0.002, d: 0.34, vol: 0.22 });                                                  // 모루
+      if (m.low) tone({ type: "triangle", f0: m.low, a: 0.01, d: 1.6, vol: 0.09, verbAmt: 0.8 });
+      if (m.bass) tone({ type: "sawtooth", f0: m.bass*0.5, a: 0.02, d: 1.2, vol: 0.07, verbAmt: 0.6 });
     },
   },
   evolve: {     // 진화: 레트로 게임 레벨업 느낌 - 통통한 8비트 타격 + 합칠 때 위로 올라가는 3음 아르페지오와 반짝임
@@ -849,6 +885,30 @@ const SFX = {
       tone({ type: "sine", f0: 659.3, f1: 493.9, a: 0.5, d: 2.8, vol: 0.045, verbAmt: 1 });
     }, 220);
   },
+  // 반물질 코어가 조여드는 소리 (i 가 커질수록 높고 조급해짐)
+  charge(i) {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    const f = 180 * Math.pow(1.5, i);
+    tone({ type: "sawtooth", f0: f, f1: f*2.6, a: 0.01, d: 0.42, vol: 0.05, verbAmt: 0.7 });
+    noise({ type: "bandpass", f0: f*4, f1: f*10, q: 5, a: 0.02, d: 0.36, vol: 0.05, verbAmt: 0.6 });
+  },
+  // 반물질 폭발: 숨이 멎는 정적 뒤에 터지는 굉음과 끝없이 내려가는 저음
+  annihilate() {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    noise({ type: "highpass", f0: 14000, f1: 3000, a: 0.0004, d: 0.1, vol: 0.4 });               // 번쩍
+    tone({ type: "square", f0: 3200, f1: 200, a: 0.0004, d: 0.12, vol: 0.14 });
+    setTimeout(() => {
+      tone({ type: "sine", f0: 120, f1: 14, a: 0.004, d: 4.5, vol: 0.45, verbAmt: 0.8 });        // 바닥이 꺼지는 저음
+      tone({ type: "sine", f0: 60, f1: 11, a: 0.02, d: 5, vol: 0.32, verbAmt: 0.9 });
+      noise({ type: "lowpass", f0: 6000, f1: 40, q: 0.5, a: 0.008, d: 3.6, vol: 0.3, verbAmt: 1 });
+    }, 40);
+    setTimeout(() => noise({ type: "bandpass", f0: 400, f1: 90, q: 0.8, a: 0.4, d: 3.2, vol: 0.12, verbAmt: 1 }), 700);   // 멀리서 되돌아오는 반향
+  },
+  // 요소 하나가 빛으로 분해되는 소리
+  vanish() {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    tone({ type: "sine", f0: 1800 + Math.random()*900, f1: 240, a: 0.002, d: 0.22, vol: 0.05, verbAmt: 0.8 });
+  },
   // 재가 되어 흩어지는 소리
   dust() {
     if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
@@ -1030,6 +1090,7 @@ function finale(x, y, color) {
   if (kind === "moon")      { moonFinale(x, y, palette); return; }        // 보름달이 뜨고 모두 달빛 속으로 사라짐
   if (kind === "vortex")    { vortexFinale(x, y, palette); return; }      // 블랙홀이 전부 빨아들이고 화면이 닫힘
   if (kind === "snap")      { snapFinale(x, y, palette); return; }        // 손가락을 튕겨 절반이 사라짐
+  if (kind === "annihilate"){ annihilateFinale(x, y, palette); return; }  // 반물질이 터져 전부 사라짐
   confettiBurst(x, y, palette);
   setTimeout(() => SFX.merge(TIERS.length - 1), 0); setTimeout(() => SFX.merge(TIERS.length - 2), 180); setTimeout(() => SFX.merge(TIERS.length - 1), 360);
 }
@@ -1167,6 +1228,45 @@ function snapFinale(x, y, palette) {
     }));
   });
   later(1950, () => { glove.frame = 2; });                          // 5) 손을 펴고 남은 빛이 식어감
+}
+/* ---------- 소멸 피날레 (반물질 폭탄) ---------- */
+// 반물질 폭탄이 그릇 한가운데로 올라와 코어를 조입니다. 터지는 순간 퍼져 나가는 빛의 파면이
+// 닿는 순서대로 모든 요소가 하얗게 달아올랐다가 빛알갱이로 흩어지고, 폭탄 자신도 마지막에 함께 사라집니다.
+function annihilateFinale(x, y, palette) {
+  finaleBusy = true; physicsHoldMs = 10000;
+  const last = TIERS.length - 1;
+  const bomb = bodies.find(b => b.tier === last) || { x, y, r: TIERS[last].r };
+  bomb.pin = { x: BOWL.cx, y: BOWL.cy }; bomb.grow = 0;
+  for (let i = 0; i < 5; i++) later(260 + i*200, () => {            // 1) 코어 충전: 밖에서 안으로 조여드는 고리
+    rings.push({ x: bomb.x, y: bomb.y, r0: 150 + i*12, color: ["#b27dff", "#8fd0ff", "#e6d2ff", "#9fe0ff", "#ffffff"][i], t: 0, in: true });
+    flash = Math.max(flash, 0.06 + i*0.03); shake = Math.max(shake, 3 + i*2); SFX.charge(i);
+  });
+  later(1460, () => {                                               // 2) 소멸: 하얗게 터짐
+    flash = 1; shake = 44; whiteDimTo = 1; whiteFall = 6; SFX.annihilate();
+    for (let i = 0; i < 4; i++) rings.push({ x: bomb.x, y: bomb.y, r0: 90 + i*130, color: ["#ffffff", "#e6d2ff", "#b27dff", "#ffffff"][i], t: -i*0.1 });
+    // 파면이 닿는 순서 = 폭탄에서 가까운 순서
+    const rest = bodies.filter(b => b !== bomb).sort((a, b2) =>
+      Math.hypot(a.x-bomb.x, a.y-bomb.y) - Math.hypot(b2.x-bomb.x, b2.y-bomb.y));
+    const gap = rest.length ? Math.min(70, 900 / rest.length) : 0;
+    rest.forEach((b, i) => later(80 + i*gap, () => {
+      if (b.gone != null) return;
+      b.gone = 0; SFX.vanish();
+      for (let k = 0; k < 7; k++) lightMote(b);
+    }));
+    later(80 + rest.length*gap + 260, () => {                       // 3) 폭탄도 마지막에 함께 사라짐
+      bomb.gone = 0; SFX.vanish();
+      for (let k = 0; k < 16; k++) lightMote(bomb);
+    });
+    later(220, () => { whiteDimTo = 0.26; });                        //    번쩍인 직후 옅은 잔광으로 내려야 사라지는 장면이 보임
+    later(2600, () => { whiteDimTo = 0; whiteFall = 1.1; });          // 4) 잔광까지 천천히 빠지고 빈 그릇만 남음
+  });
+}
+function lightMote(b) {                                             // 빛알갱이: 위로 떠오르며 옅어짐
+  const a = Math.random()*Math.PI*2, r = b.r * (0.2 + Math.random()*0.8);
+  drifts.push({ x: b.x + Math.cos(a)*r, y: b.y + Math.sin(a)*r, vx: (Math.random()-.5)*160, vy: -60 - Math.random()*200, g: -40,
+    swing: 20 + Math.random()*40, sway: Math.random()*6.28, rot: Math.random()*6.28, spin: (Math.random()-.5)*5,
+    w: 3 + Math.random()*7, h: 3 + Math.random()*7, life: 1.8,
+    color: ["#ffffff", "#fff6d8", "#d9c2ff", "#bfe6ff"][Math.floor(Math.random()*4)] });
 }
 function ashMote(b) {                                               // 흩어지는 재
   const a = Math.random()*Math.PI*2, r = b.r * (0.3 + Math.random()*0.7);
@@ -1635,6 +1735,18 @@ function ashenSprite(t) {
   }
   return sp.ashen;
 }
+// 소멸 연출용: 통째로 하얗게 달아오른 스프라이트 (매 프레임 필터는 너무 느려서 한 번만 만들어 둠)
+function whiteSprite(t) {
+  const sp = sprite(t);
+  if (!sp.white) {
+    const c = document.createElement("canvas"); c.width = c.height = sp.S;
+    const g = c.getContext("2d");
+    g.drawImage(sp.base, 0, 0); g.drawImage(sp.light, 0, 0);
+    g.globalCompositeOperation = "source-in"; g.fillStyle = "#fffdf6"; g.fillRect(0, 0, sp.S, sp.S);
+    sp.white = c;
+  }
+  return sp.white;
+}
 let glowCanvas = null;
 function glowSprite() {
   if (!glowCanvas) {
@@ -1725,6 +1837,7 @@ function drawBody(b) {
   const hw = b.howl == null ? null : Math.min(1, b.howl), cry = b.cry == null ? null : Math.min(1, b.cry);
   const sk = b.suck ? Math.min(1, b.suck.p) : null, col = b.collapse == null ? null : Math.min(1, b.collapse);
   const du = b.dust == null ? null : Math.min(1, b.dust);
+  const go = b.gone == null ? null : Math.min(1, b.gone);
   let s = 1;
   if (b.pop) { b.pop = Math.max(0, b.pop - 0.08); s = 1 + Math.sin(b.pop*Math.PI) * 0.28; }
   if (k != null) s *= 1 + 0.14*Math.sin(Math.min(1, k)*Math.PI) - 0.3*k;   // 번개에 맞아 부풀었다가 오그라듦
@@ -1743,6 +1856,7 @@ function drawBody(b) {
     const q = Math.min(1, b.aim);
     ctx.rotate(-0.16*q); ctx.translate((Math.random()-.5)*3*q, (Math.random()-.5)*3*q);
   }
+  if (go != null) ctx.scale(1 + 0.5*go*go, 1 + 0.5*go*go);                    // 소멸: 하얗게 달아오르며 부풀어 오름
   if (du != null) {                                                          // 재가 되어 흩어짐: 위로 떠오르며 옅어짐
     ctx.translate((Math.random()-.5)*4*du, -du*du*b.r*0.5);
     ctx.globalAlpha = 1 - du*du;
@@ -1765,6 +1879,13 @@ function drawBody(b) {
   if (k == null) {
     const ash = b.ash == null ? null : Math.min(1, b.ash);
     ctx.save(); ctx.rotate(t.noSpin ? 0 : (b.rot || 0));                                 // 본체: 물리 회전
+    if (go != null) {                                                                    // 소멸: 순식간에 하얗게 타 버림
+      ctx.globalAlpha = (1 - go)*(1 - go);
+      ctx.drawImage(sp.base, -h, -h);
+      ctx.globalAlpha = Math.min(1, go*4) * (1 - go);
+      ctx.drawImage(whiteSprite(t), -h, -h);
+      ctx.globalAlpha = 1; ctx.restore(); ctx.restore(); return;
+    }
     if (ash == null) ctx.drawImage(sp.base, -h, -h);
     else {                                                                               // 화산재에 덮여 회색으로 굳는 중
       ctx.globalAlpha = 1 - ash; ctx.drawImage(sp.base, -h, -h);
@@ -1813,7 +1934,8 @@ function render() {
   for (const rg of rings) {                                     // 합체 충격파
     if (rg.t < 0) continue;
     ctx.globalAlpha = (1 - rg.t) * 0.8; ctx.strokeStyle = rg.color; ctx.lineWidth = 6 * (1 - rg.t) + 1;
-    ctx.beginPath(); ctx.arc(rg.x, rg.y, rg.r0 * (0.6 + rg.t*2.2), 0, Math.PI*2); ctx.stroke();
+    const rr = rg.in ? rg.r0 * (2.8 - rg.t*2.2) : rg.r0 * (0.6 + rg.t*2.2);   // in: 밖에서 안으로 조여듦
+    ctx.beginPath(); ctx.arc(rg.x, rg.y, Math.max(1, rr), 0, Math.PI*2); ctx.stroke();
   }
   for (const p of particles) {                                  // 반짝이 파티클
     ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = p.color;
@@ -1903,6 +2025,7 @@ function render() {
   }
   ctx.globalAlpha = 1;
   if (voidDim > 0.003) { ctx.fillStyle = `rgba(0,0,0,${voidDim})`; ctx.fillRect(0, 0, W, H); }   // 블랙홀이 삼킨 뒤 닫히는 화면
+  if (whiteDim > 0.003) { ctx.fillStyle = `rgba(255,252,245,${whiteDim})`; ctx.fillRect(0, 0, W, H); }   // 반물질 폭발의 하얀 빛
 
   if (overSince) {
     ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(0, 0, W, H);
@@ -1963,6 +2086,11 @@ function loop(now) {
           b.x = k.hole.x + Math.cos(k.ang) * rr; b.y = k.hole.y + Math.sin(k.ang) * rr;
           if (p >= 1) { swallowed(b); b.dead = true; gone = true; }
         }
+        if (b.gone != null) {                                    // 빛으로 분해되는 중
+          b.gone += frame * 1.5;
+          if (Math.random() < 0.5) lightMote(b);
+          if (b.gone >= 1) { b.dead = true; gone = true; }
+        }
         if (b.dust != null) {                                    // 재가 되어 흩어지는 중
           b.dust += frame * 0.85;
           if (Math.random() < 0.4) ashMote(b);
@@ -2003,6 +2131,7 @@ function loop(now) {
     if (moon && moon.t < 1) moon.t = Math.min(1, moon.t + frame / 1.4);   // 달이 떠오르는 중
     nightDim += (nightDimTo - nightDim) * Math.min(1, frame * 0.9);
     voidDim += (voidDimTo - voidDim) * Math.min(1, frame * 1.1);
+    whiteDim += (whiteDimTo - whiteDim) * Math.min(1, frame * (whiteDimTo > whiteDim ? 16 : whiteFall));   // 번쩍 차올랐다가 정해진 속도로 빠짐
     for (const d of drifts) {                                    // 재·기포처럼 천천히 흘러가는 조각들
       d.vy += d.g * frame; d.sway += frame * 2.4;
       d.x += (d.vx + Math.sin(d.sway) * d.swing) * frame; d.y += d.vy * frame;
