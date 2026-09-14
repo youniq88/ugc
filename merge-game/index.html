@@ -107,6 +107,10 @@ const KITS = {
   dogs: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
   ],
+  // 우주 실물 크기 프리셋 전용: 사진풍 천체 8종 (AI 렌더링, 512px 투명 PNG, 같은 CDN. 블랙홀은 코드로 그림)
+  cosmos: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
 };
 const PRESETS = {
   planets: {   // 9단계: 초승달 → 그믐달 → 보름달 → 지구 → 토성 → 태양 → 혜성 → 빛나는 별 → 블랙홀
@@ -192,6 +196,22 @@ const PRESETS = {
       { r:134, img:"f5a74201-4ece-4d00-9423-fbc5141a490e.png", glow:"#9fd8ff", scale:1.08 },   // 허스키
       { r:160, img:"8189093b-b6b8-4a43-8f5c-51a87ffd7024.png", glow:"#ffe0b0", scale:1.08 },   // 그레이트 데인
       { r:190, img:"80bfad68-765e-4a34-b38b-8a9001d8ee33.png", glow:"#cfe4ff", scale:1.08 },   // 늑대
+    ],
+  },
+  cosmos: {    // 9단계 우주 실물 크기: 달 → 화성 → 지구 → 해왕성 → 목성 → 태양 → 아크투르스 → 베텔게우스 → 블랙홀
+    // 반지름은 실제 지름의 로그값을 36~190px 에 그대로 대응시킨 것입니다. 실제 지름이 7자리수(3천 km ~ 380억 km)나
+    // 벌어져서 선형으로는 달이 0.00002px 이 되므로, 로그 간격으로 두어 "실제 배율 차이가 클수록 시각적 단차도 크게" 맞췄습니다.
+    kit: "cosmos", sound: "nova", finale: "vortex",   // 블랙홀이 나오면 남은 천체를 전부 빨아들이고 화면이 닫힘
+    items: [
+      { r:36,  img:"39cc1723-dfbe-4b2c-8271-f5d6a1ed8049.png", glow:"#d8d8d8", scale:1.04 },   // 달 3,474 km
+      { r:42,  img:"1416d634-6a0a-49d8-b04a-70ffccb69b75.png", glow:"#ff7a45", scale:1.04 },   // 화성 6,779 km
+      { r:48,  img:"3ab5cb9b-35b9-4e72-b162-db4aa42842da.png", glow:"#4da3ff", scale:1.04 },   // 지구 12,742 km
+      { r:61,  img:"3262ae96-34ee-4461-9b97-de065db8cfbd.png", glow:"#2f6bff", scale:1.04 },   // 해왕성 49,244 km
+      { r:71,  img:"c09e9e9c-fa5a-4d72-8f19-f5c880436297.png", glow:"#e8c9a0", scale:1.04 },   // 목성 139,820 km
+      { r:93,  img:"5f6cb703-7cfe-417f-a9e7-ce2e2074b596.png", glow:"#ffb300", scale:1.04 },   // 태양 1,391,400 km
+      { r:124, img:"607e5968-971b-4398-9413-986b1172ec0d.png", glow:"#ff8a2e", scale:1.04 },   // 아크투르스 (적색거성) 3,560만 km
+      { r:157, img:"5cb31019-7d72-43b9-99b4-3a3dd20082af.png", glow:"#ff4a1f", scale:1.04 },   // 베텔게우스 (적색초거성) 12억 3,400만 km
+      { r:190, shape:"blackhole", glow:"#ff9a3d", noSpin:true },                               // 블랙홀 M87* 사건의 지평선 384억 km
     ],
   },
   evolution: { // 9단계 진화: 세포 → 물고기 → 도마뱀 → 공룡 → 원숭이 → 사람(스마트폰 보는 비즈니스맨) → 로봇 → AI → 은하
@@ -292,6 +312,7 @@ let ended = false, endedAt = 0;          // 마지막 단계 도달 후 정지 �
 let finaleBusy = false;                  // 피날레 진행 중 (이때는 더 이상 합체하지 않음)
 let meteor = null;                       // 떨어지는 운석 (공룡 피날레)
 let moon = null;                         // 떠오르는 보름달 (강아지 피날레)
+let voidDim = 0, voidDimTo = 0;          // 블랙홀이 삼킨 뒤 닫히는 화면
 let nightDim = 0, nightDimTo = 0;        // 푸른 밤으로 내려앉는 화면
 let ashFall = false, ashDim = 0, ashDimTo = 0;   // 화산재 (폼페이 피날레)
 let finalePalette = null;
@@ -330,7 +351,7 @@ function loadImages() {
 function reset() {
   bodies = []; particles = []; popups = []; rings = []; confetti = []; bolts = []; fxQueue = []; drifts = []; score = 0; overSince = 0; flash = 0; ended = false;
   finaleBusy = false; meteor = null; ashFall = false; ashDim = 0; ashDimTo = 0; arrows = [];
-  moon = null; nightDim = 0; nightDimTo = 0;
+  moon = null; nightDim = 0; nightDimTo = 0; voidDim = 0; voidDimTo = 0;
   nextTier = randTier(); lastDrop = gt; melodyIdx = 0;   // 멜로디도 처음부터
 }
 function randTier() {
@@ -728,6 +749,25 @@ const SFX = {
     tone({ type: "sawtooth", f0: base*0.36, f1: base*0.5, a: 0.15, d: 0.5 + 0.8*k, vol: 0.03 + 0.03*k, verbAmt: 0.9 });
     tone({ type: "sine", f0: base*2, f1: base*1.86, a: 0.2, d: 0.4 + 0.6*k, vol: 0.025, verbAmt: 1 });
   },
+  // 블랙홀로 빨려 들어가는 소리: 음이 아래로 미끄러지며 멀어짐 (k = 0~1, 클수록 낮고 길게)
+  suck(k = 1) {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    tone({ type: "sawtooth", f0: 480 - 200*k, f1: 36, a: 0.03, d: 0.5 + 0.4*k, vol: 0.04 + 0.04*k, verbAmt: 0.9 });
+    noise({ type: "bandpass", f0: 2400, f1: 140, q: 1.4, a: 0.03, d: 0.55 + 0.3*k, vol: 0.05 + 0.04*k, verbAmt: 0.7 });
+  },
+  // 사건의 지평선 너머로 사라지는 짧은 소리
+  gulp() {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    tone({ type: "sine", f0: 220, f1: 30, a: 0.001, d: 0.18, vol: 0.12, verbAmt: 0.6 });
+    noise({ type: "highpass", f0: 3000, f1: 600, a: 0.001, d: 0.07, vol: 0.05 });
+  },
+  // 마지막에 한 점으로 무너지는 소리
+  collapse() {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    tone({ type: "sine", f0: 92, f1: 17, a: 0.004, d: 2.4, vol: 0.34, verbAmt: 0.5 });
+    noise({ type: "lowpass", f0: 1400, f1: 55, q: 0.6, a: 0.01, d: 2, vol: 0.22, verbAmt: 1 });
+    setTimeout(() => tone({ type: "triangle", f0: 42, f1: 13, a: 0.2, d: 2.2, vol: 0.18 }), 280);
+  },
   // 해가 지고 밤이 내려앉는 소리
   nightfall() {
     if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
@@ -759,6 +799,7 @@ function bounce() { return bounceOverride ?? presetBounce(); }
 function step(dt) {
   const g = gravity(), ph = presetPhysics(), e = bounce(), wob = ph.wobble || 0;
   for (const b of bodies) {
+    if (b.suck || b.collapse != null) continue;      // 블랙홀에 끌려가는 중: 물리 대신 피날레가 위치를 잡음
     if (b.inTube) {
       b.vy = tubeSpeed(); b.vx = 0; b.x = BOWL.cx;
       if (b.y > BOWL.neckY) b.inTube = false;      // 그릇으로 진입: 방향을 틀지 않고 그대로 일직선으로 떨어짐
@@ -774,6 +815,7 @@ function step(dt) {
     }
   }
   for (const b of bodies) {
+    if (b.suck || b.collapse != null) continue;
     // 용기 = 관 기둥 ∪ 원형 그릇. 몸체 일부라도 관 구간에 걸쳐 있으면 관 벽만, 완전히 아래로 내려오면 그릇 벽만 적용
     if (b.y - b.r < BOWL.neckY) {
       const lim = TUBE.half - b.r;
@@ -804,8 +846,10 @@ function step(dt) {
   const merges = [];
   for (let i = 0; i < bodies.length; i++) {
     const a = bodies[i];
+    if (a.suck || a.collapse != null) continue;
     for (let j = i+1; j < bodies.length; j++) {
       const b = bodies[j];
+      if (b.suck || b.collapse != null) continue;
       const dx = b.x - a.x, dy = b.y - a.y, rs = a.r + b.r;
       const d2 = dx*dx + dy*dy;
       if (d2 >= rs*rs) continue;
@@ -856,7 +900,7 @@ function doMerge(a, b) {
   if (next === TIERS.length - 1) finale(x, y, TIERS[next].glow);   // 마지막 요소 탄생!
 }
 // 축하 연출: 큰 폭발 파티클 + 색종이 + 충격파 여러 겹 + 화면 흔들림. 이후 게임 정지 (텍스트 없음)
-// 프리셋에 finale 값이 있으면(신화 = 번개, 오디세이아 = 화살, 강아지 = 달빛) 색종이 대신 그 연출로 이어짐
+// 프리셋에 finale 값이 있으면(신화 = 번개, 오디세이아 = 화살, 강아지 = 달빛, 우주 = 블랙홀) 색종이 대신 그 연출로 이어짐
 function finale(x, y, color) {
   ended = true; endedAt = gt; flash = 1; shake = 30;
   const palette = [color, "#ffffff", "#ffd54f", "#ff5a7a", "#4da3ff", "#2eff7a", "#c04dff"];
@@ -873,6 +917,7 @@ function finale(x, y, color) {
   if (kind === "implode")   { implodeFinale(x, y, palette); return; }     // 수압에 찌그러져 터짐
   if (kind === "arrow")     { arrowFinale(x, y, palette); return; }       // 화살 한 발이 전부를 꿰뚫음
   if (kind === "moon")      { moonFinale(x, y, palette); return; }        // 보름달이 뜨고 모두 달빛 속으로 사라짐
+  if (kind === "vortex")    { vortexFinale(x, y, palette); return; }      // 블랙홀이 전부 빨아들이고 화면이 닫힘
   confettiBurst(x, y, palette);
   setTimeout(() => SFX.merge(TIERS.length - 1), 0); setTimeout(() => SFX.merge(TIERS.length - 2), 180); setTimeout(() => SFX.merge(TIERS.length - 1), 360);
 }
@@ -978,6 +1023,38 @@ function arrowHit(a) {                                              // 화살이
       color: ["#ffffff", "#ffd24a", "#ff8a3a"][k % 3], size: 3 + Math.random()*6, spin: Math.random()*Math.PI });
   }
   shoot(b.x, b.y, a.path, a.i + 1, a.palette, a.hero);
+}
+
+/* ---------- 소용돌이 피날레 (블랙홀) ---------- */
+// 블랙홀이 나오면 가까운 천체부터 차례로 나선을 그리며 끌려 들어갑니다. 다가갈수록 빨라지고 조석력으로 길게 늘어나다
+// 사건의 지평선에서 사라지며, 전부 삼킨 뒤에는 블랙홀 자신도 한 점으로 무너지고 화면이 검게 닫힙니다 (승리 연출 없음).
+function vortexFinale(x, y, palette) {
+  finaleBusy = true;
+  const hole = bodies.find(b => b.tier === TIERS.length - 1) || { x, y, r: TIERS[TIERS.length-1].r };
+  const targets = bodies.filter(b => b !== hole)
+    .sort((a, b) => Math.hypot(a.x-hole.x, a.y-hole.y) - Math.hypot(b.x-hole.x, b.y-hole.y));
+  const gap = targets.length ? Math.min(90, 950 / targets.length) : 0;
+  targets.forEach((b, i) => later(260 + i*gap, () => {                     // 가까운 것부터 차례로 끌려 들어감
+    if (b.suck) return;
+    const dx = b.x - hole.x, dy = b.y - hole.y;
+    b.suck = { hole, r0: Math.hypot(dx, dy), a0: Math.atan2(dy, dx), ang: Math.atan2(dy, dx),
+      p: 0, dur: 0.8 + Math.random()*0.3, spin: (Math.random() < 0.5 ? -1 : 1) * (3.2 + Math.random()*1.8) };
+    if (i % 2 === 0) SFX.suck(b.tier / (TIERS.length - 1));
+  }));
+  later(260 + targets.length*gap + 1500, () => {                          // 전부 삼킨 뒤 블랙홀도 무너짐
+    hole.collapse = 0; flash = 0.55; shake = 26; voidDimTo = 1; SFX.collapse();
+    for (let i = 0; i < 3; i++) rings.push({ x: hole.x, y: hole.y, r0: 150 + i*90, color: ["#ffd9a0", "#ff9a3d", "#ffffff"][i], t: -i*0.18 });
+  });
+}
+function swallowed(b) {                                            // 사건의 지평선을 넘는 순간
+  const h = b.suck.hole;
+  SFX.gulp(); shake = Math.max(shake, 5); flash = Math.max(flash, 0.12);
+  rings.push({ x: h.x, y: h.y, r0: h.r*0.5, color: "#ffd9a0", t: 0 });
+  for (let i = 0; i < 8; i++) {                                    // 강착원반으로 흩어지는 잔해
+    const ang = b.suck.ang + (Math.random()-.5)*1.2, sp = 160 + Math.random()*420;
+    particles.push({ x: b.x, y: b.y, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, life: 0.45,
+      color: ["#ffffff", "#ffd9a0", "#ff9a3d"][i % 3], size: 2 + Math.random()*5, spin: Math.random()*Math.PI });
+  }
 }
 
 /* ---------- 달빛 피날레 (늑대) ---------- */
@@ -1463,10 +1540,13 @@ function drawContainer() {
 function drawBody(b) {
   const t = TIERS[b.tier], sp = sprite(t), h = sp.S/2, k = b.burn, cr = b.crush, sl = b.slain == null ? null : Math.min(1, b.slain);
   const hw = b.howl == null ? null : Math.min(1, b.howl), cry = b.cry == null ? null : Math.min(1, b.cry);
+  const sk = b.suck ? Math.min(1, b.suck.p) : null, col = b.collapse == null ? null : Math.min(1, b.collapse);
   let s = 1;
   if (b.pop) { b.pop = Math.max(0, b.pop - 0.08); s = 1 + Math.sin(b.pop*Math.PI) * 0.28; }
   if (k != null) s *= 1 + 0.14*Math.sin(Math.min(1, k)*Math.PI) - 0.3*k;   // 번개에 맞아 부풀었다가 오그라듦
   if (cr != null) s *= 1 - 0.5*cr;                                         // 수압에 짜부라짐
+  if (sk != null) s *= 1 - 0.82*sk;                                        // 블랙홀에 가까워질수록 작아짐
+  if (col != null) s *= Math.max(0, 1 - col);                              // 블랙홀이 한 점으로 무너짐
   ctx.save(); ctx.translate(b.x, b.y); ctx.scale(s, s);
   if (cr != null) ctx.scale(1 - 0.3*cr, 1 + 0.12*cr);                      // 옆에서 눌리는 느낌
   if (sl != null) {                                                          // 화살에 맞아 움찔했다가 옆으로 쓰러지며 사라짐
@@ -1476,6 +1556,10 @@ function drawBody(b) {
   if (b.aim != null) {                                                       // 활시위를 당기는 중: 뒤로 젖혀지고 팽팽하게 떨림
     const q = Math.min(1, b.aim);
     ctx.rotate(-0.16*q); ctx.translate((Math.random()-.5)*3*q, (Math.random()-.5)*3*q);
+  }
+  if (sk != null) {                                                          // 조석력: 블랙홀 쪽으로 길게 늘어남
+    ctx.rotate(b.suck.ang); ctx.scale(1 + 1.2*sk*(1-sk), 1 - 0.45*sk); ctx.rotate(-b.suck.ang);
+    ctx.globalAlpha = 1 - sk*sk;
   }
   if (cry != null) ctx.rotate(-0.2 * Math.sin(Math.min(1, cry*1.6)*Math.PI));   // 늑대: 고개를 젖히고 길게 욺
   if (hw != null) {                                                          // 따라 울고 나서 달빛이 되어 떠오름
@@ -1501,6 +1585,7 @@ function drawBody(b) {
     if (ash != null) ctx.globalAlpha = 1 - ash;
     else if (sl != null) ctx.globalAlpha = 1 - sl*sl;
     else if (hw != null) ctx.globalAlpha = 1 - Math.pow(Math.max(0, hw - 0.35) / 0.65, 2);
+    else if (sk != null) ctx.globalAlpha = 1 - sk*sk;
     ctx.drawImage(sp.light, -h, -h);                                                     // 조명: 고정
     ctx.restore(); return;
   }
@@ -1626,6 +1711,7 @@ function render() {
     ctx.restore();
   }
   ctx.globalAlpha = 1;
+  if (voidDim > 0.003) { ctx.fillStyle = `rgba(0,0,0,${voidDim})`; ctx.fillRect(0, 0, W, H); }   // 블랙홀이 삼킨 뒤 닫히는 화면
 
   if (overSince) {
     ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(0, 0, W, H);
@@ -1668,6 +1754,17 @@ function loop(now) {
       for (const b of bodies) {
         if (b.aim != null) b.aim += frame * 1.3;                 // 시위를 당기는 중
         if (b.cry != null) b.cry += frame * 0.55;                // 늑대가 우는 중
+        if (b.suck) {                                            // 나선을 그리며 블랙홀로 끌려감 (가까울수록 빨라짐)
+          const k = b.suck; k.p += frame / k.dur;
+          const p = Math.min(1, k.p), e2 = p*p, rr = k.r0 * (1 - e2);
+          k.ang = k.a0 + k.spin * e2;
+          b.x = k.hole.x + Math.cos(k.ang) * rr; b.y = k.hole.y + Math.sin(k.ang) * rr;
+          if (p >= 1) { swallowed(b); b.dead = true; gone = true; }
+        }
+        if (b.collapse != null) {                                // 블랙홀이 한 점으로 무너짐
+          b.collapse += frame / 1.2;
+          if (b.collapse >= 1) { b.dead = true; gone = true; }
+        }
         if (b.howl != null) {                                    // 따라 울고 달빛이 되어 사라짐
           b.howl += frame * 0.75;
           if (b.howl > 0.4 && Math.random() < 0.35) moonMote(b);
@@ -1698,6 +1795,7 @@ function loop(now) {
     ashDim += (ashDimTo - ashDim) * Math.min(1, frame * 1.2);
     if (moon && moon.t < 1) moon.t = Math.min(1, moon.t + frame / 1.4);   // 달이 떠오르는 중
     nightDim += (nightDimTo - nightDim) * Math.min(1, frame * 0.9);
+    voidDim += (voidDimTo - voidDim) * Math.min(1, frame * 1.1);
     for (const d of drifts) {                                    // 재·기포처럼 천천히 흘러가는 조각들
       d.vy += d.g * frame; d.sway += frame * 2.4;
       d.x += (d.vx + Math.sin(d.sway) * d.swing) * frame; d.y += d.vy * frame;
