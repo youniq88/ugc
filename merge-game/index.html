@@ -18,7 +18,7 @@
   #ui label { display:flex; align-items:center; gap:8px; color:#fff; font-size:14px; background:rgba(255,255,255,.12);
     border:1px solid rgba(255,255,255,.3); border-radius:20px; padding:6px 14px; backdrop-filter:blur(6px); }
   #ui input[type=range] { width:110px; accent-color:#ffd0e0; }
-  #hint { position:fixed; bottom:10px; left:0; right:0; text-align:center; color:rgba(255,255,255,.35); font-size:12px; z-index:10; pointer-events:none; }
+  #hint { position:fixed; bottom:10px; left:0; right:0; padding:0 14px; line-height:1.6; text-align:center; color:rgba(255,255,255,.35); font-size:12px; z-index:10; pointer-events:none; }
   #audioHint { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); color:#fff; background:rgba(0,0,0,.55);
     border:1px solid rgba(255,255,255,.3); border-radius:30px; padding:12px 22px; font-size:15px; z-index:20; pointer-events:none; backdrop-filter:blur(6px); }
   #savePanel { position:fixed; inset:0; background:rgba(0,0,0,.72); z-index:30; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; backdrop-filter:blur(8px); }
@@ -39,6 +39,9 @@
   <button id="btnReset">다시 시작</button>
   <button id="btnRec">● 녹화</button>
   <label title="탄성: 벽과 요소끼리 튀는 정도">탄성 <input id="bounce" type="range" min="0" max="1" step="0.01"><span id="bounceVal"></span></label>
+  <label title="낙하 속도: 관에서 내려오는 속도 (px/s)">낙하 <input id="speed" type="range" min="200" max="2000" step="10"><span id="speedVal"></span></label>
+  <label title="분당 발사 수: 1분에 몇 개를 떨어뜨릴지 (관이 막히지 않는 최대치까지만 올라갑니다)">발사 <input id="rate" type="range" min="10" max="1000" step="5"><span id="rateVal"></span></label>
+  <label title="중력: 그릇 안에서 아래로 당기는 힘 (px/s²)">중력 <input id="grav" type="range" min="400" max="8000" step="50"><span id="gravVal"></span></label>
   <button id="btnHide">UI 숨기기</button>
 </div>
 <div id="savePanel" class="hidden">
@@ -49,7 +52,7 @@
   <button id="btnClose">닫기</button>
 </div>
 <div id="audioHint">🔈 화면을 한 번 탭하면 소리가 켜집니다</div>
-<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화(시작 시 UI 자동 숨김) · Enter: 다시 시작 · URL ?preset=이름 &bounce=0.7 &ui=0</div>
+<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화(시작 시 UI 자동 숨김) · Enter: 다시 시작 · URL ?preset=이름 &bounce=0.7 &speed=950 &rate=40 &gravity=2600 &ui=0</div>
 
 <script>
 /* ============================================================
@@ -252,11 +255,11 @@ const PRESETS = {
 /* ---------- 게임 동작 설정 ---------- */
 const SETTINGS = {
   preset: "planets",     // 기본 프리셋 (URL ?preset=gems 로 바꿀 수 있음)
-  tubeSpeed: 950,        // 관 안에서 줄지어 내려오는 속도 (px/s) - 1단계만 떨어뜨리므로 빠르게 (보통 40초 안팎에 클리어)
-  tubeGap: 48,           // 관 안에서 요소 사이 빈 간격 (px) - 낙하 간격은 여기서 자동 계산 (48이면 12일 때보다 낙하 빈도 70%)
+  tubeSpeed: 950,        // 관 안에서 줄지어 내려오는 속도 (px/s) - 1단계만 떨어뜨리므로 빠르게 (보통 40초 안팎에 클리어. UI "낙하" 슬라이더나 URL ?speed= 로 바꿀 수 있음)
+  tubeGap: 48,           // 관 안에서 요소 사이 빈 간격 (px) - 분당 발사 수의 기본값(=최대치)은 여기서 자동 계산 (UI "발사" 슬라이더나 URL ?rate= 로 더 뜸하게 만들 수 있음)
   dropTiers: 1,          // 처음 몇 단계까지 랜덤으로 떨어뜨릴지 (1이면 항상 가장 낮은 단계 한 가지만)
   maxTierVanish: true,   // 마지막 단계끼리 합치면 사라지게 (false면 그대로 유지)
-  gravity: 2600,         // 중력 (px/s²)
+  gravity: 2600,         // 중력 (px/s²) - UI "중력" 슬라이더나 URL ?gravity= 로 바꿀 수 있음
   restitution: 0.55,     // 튕김 정도 (0~1) - 벽·요소끼리 통통 튀는 정도 (UI 탄성 슬라이더나 URL ?bounce= 로 바꿀 수 있음)
   gameOverHoldMs: 2500,  // 넘쳤을 때 몇 ms 뒤에 자동 재시작
   showScore: true,
@@ -339,16 +342,24 @@ function randTier() {
 function spawn(tier, x, y, vx=0, vy=0, inTube=false) {
   bodies.push({ id: uid++, tier, r: TIERS[tier].r, x, y, vx, vy, inTube, born: gt, rot: 0, av: 0 });
 }
+// 낙하 속도 / 분당 발사 수 / 중력: UI 슬라이더와 URL 로 바꿀 수 있음 (null이면 SETTINGS 기본값)
+let speedOverride = null, rateOverride = null, gravOverride = null;
+function tubeSpeed() { return speedOverride ?? SETTINGS.tubeSpeed; }
+function gravity() { return gravOverride ?? SETTINGS.gravity; }
+// 관 안에서 앞뒤가 겹치지 않는 최대 발사 수. 슬라이더를 더 올려도 여기서 막힘
+function maxDropsPerMin() { return 60000 / (dropSpacing() / tubeSpeed() * 1000); }
+function dropsPerMin() { return Math.min(rateOverride ?? Infinity, maxDropsPerMin()); }
+
 // 관 안 줄 간격: 떨어뜨리는 단계 중 가장 큰 지름 + tubeGap
 function dropSpacing() {
   let maxR = 0;
   for (let i = 0; i < Math.min(SETTINGS.dropTiers, TIERS.length); i++) if (TIERS[i].r < TUBE.half - 4) maxR = Math.max(maxR, TIERS[i].r);
   return maxR * 2 + SETTINGS.tubeGap;
 }
-function dropIntervalMs() { return dropSpacing() / SETTINGS.tubeSpeed * 1000; }
+function dropIntervalMs() { return 60000 / dropsPerMin(); }
 function drop() {
   const t = nextTier, r = TIERS[t].r;
-  spawn(t, BOWL.cx, -r - 4, 0, SETTINGS.tubeSpeed, true);   // 화면 위에서 등장
+  spawn(t, BOWL.cx, -r - 4, 0, tubeSpeed(), true);   // 화면 위에서 등장
   nextTier = randTier(); lastDrop = gt;
 }
 
@@ -742,11 +753,14 @@ let bounceOverride = null;                     // UI 슬라이더/URL 로 바꾼
 function presetBounce() { return presetPhysics().restitution ?? SETTINGS.restitution; }
 function bounce() { return bounceOverride ?? presetBounce(); }
 { const b = parseFloat(params.get("bounce")); if (!isNaN(b)) bounceOverride = Math.min(1, Math.max(0, b)); }
+{ const v = parseFloat(params.get("speed"));   if (!isNaN(v)) speedOverride = Math.min(2000, Math.max(200, v)); }
+{ const v = parseFloat(params.get("rate"));    if (!isNaN(v)) rateOverride  = Math.min(1000, Math.max(10, v)); }
+{ const v = parseFloat(params.get("gravity")); if (!isNaN(v)) gravOverride  = Math.min(8000, Math.max(400, v)); }
 function step(dt) {
-  const g = SETTINGS.gravity, ph = presetPhysics(), e = bounce(), wob = ph.wobble || 0;
+  const g = gravity(), ph = presetPhysics(), e = bounce(), wob = ph.wobble || 0;
   for (const b of bodies) {
     if (b.inTube) {
-      b.vy = SETTINGS.tubeSpeed; b.vx = 0; b.x = BOWL.cx;
+      b.vy = tubeSpeed(); b.vx = 0; b.x = BOWL.cx;
       if (b.y > BOWL.neckY) b.inTube = false;      // 그릇으로 진입: 방향을 틀지 않고 그대로 일직선으로 떨어짐
     } else {
       b.vy += g * dt;
@@ -1633,7 +1647,7 @@ function loop(now) {
     } else if (!overSince) {
       if (gt - lastDrop > dropIntervalMs()) drop();
       while (acc >= FIXED) { step(FIXED); acc -= FIXED; }
-      const transitMs = (BOWL.neckY + 40) / SETTINGS.tubeSpeed * 1000;
+      const transitMs = (BOWL.neckY + 40) / tubeSpeed() * 1000;
       const stuck = bodies.some(b => b.y - b.r < DANGER_Y && gt - b.born > transitMs + 900);
       if (stuck) { overSince = gt; shake = 20; }
     } else if (gt - overSince > SETTINGS.gameOverHoldMs) reset();
@@ -1715,11 +1729,26 @@ const ui = document.getElementById("ui"), hint = document.getElementById("hint")
 const sel = document.getElementById("presetSel");
 for (const k of Object.keys(PRESETS)) { const o = document.createElement("option"); o.value = k; o.textContent = k; sel.appendChild(o); }
 sel.value = presetName;
-sel.onchange = () => { presetName = sel.value; TIERS = PRESETS[presetName].items; bounceOverride = null; syncBounceUI(); setPaused(true); loadImages().then(() => { reset(); setPaused(false); }); };
+sel.onchange = () => { presetName = sel.value; TIERS = PRESETS[presetName].items; bounceOverride = speedOverride = rateOverride = gravOverride = null; syncBounceUI(); syncTuneUI(); setPaused(true); loadImages().then(() => { reset(); setPaused(false); }); };
 const bounceIn = document.getElementById("bounce"), bounceVal = document.getElementById("bounceVal");
 function syncBounceUI() { bounceIn.value = bounce(); bounceVal.textContent = bounce().toFixed(2); }
 bounceIn.oninput = () => { bounceOverride = parseFloat(bounceIn.value); syncBounceUI(); };   // 슬라이더는 즉시 반영 (프리셋을 바꾸면 그 프리셋 기본값으로 돌아감)
 syncBounceUI();
+// 낙하 속도 / 분당 발사 수 / 중력 슬라이더 (전부 즉시 반영, 프리셋을 바꾸면 기본값으로 돌아감)
+const speedIn = document.getElementById("speed"), speedVal = document.getElementById("speedVal");
+const rateIn = document.getElementById("rate"), rateVal = document.getElementById("rateVal");
+const gravIn = document.getElementById("grav"), gravVal = document.getElementById("gravVal");
+function syncTuneUI() {
+  speedIn.value = tubeSpeed(); speedVal.textContent = Math.round(tubeSpeed());
+  const eff = dropsPerMin(), max = maxDropsPerMin();
+  rateIn.value = Math.min(1000, Math.max(10, Math.round(rateOverride ?? max)));
+  rateVal.textContent = Math.round(eff) + (rateOverride != null && rateOverride > max + 0.5 ? " (최대)" : "");
+  gravIn.value = gravity(); gravVal.textContent = Math.round(gravity());
+}
+speedIn.oninput = () => { speedOverride = parseFloat(speedIn.value); syncTuneUI(); };
+rateIn.oninput  = () => { rateOverride  = parseFloat(rateIn.value);  syncTuneUI(); };
+gravIn.oninput  = () => { gravOverride  = parseFloat(gravIn.value);  syncTuneUI(); };
+syncTuneUI();
 document.getElementById("btnReset").onclick = reset;
 const btnPause = document.getElementById("btnPause");
 function setPaused(v) { paused = v; btnPause.textContent = paused ? "▶ 재개" : "⏸ 일시정지"; btnPause.classList.toggle("on", paused); last = performance.now(); }
