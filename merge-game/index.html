@@ -231,7 +231,7 @@ const PRESETS = {
       { r:110, img:"64366796-e792-489f-834a-cc38d3a2a40f.png", glow:"#cbd8ff", scale:1.06 },   // 국부은하군 1,000만 광년
       { r:134, img:"145680e8-7138-47f8-8d64-272df2b00f43.png", glow:"#ffd9a0", scale:1.06 },   // 라니아케아 초은하단 5억 2,000만 광년
       { r:160, img:"290c964d-994c-414c-a629-90a3165a651d.png", glow:"#8f9dff", scale:1.06 },   // 관측 가능한 우주 930억 광년
-      { r:190, img:"1eec6bfd-90cd-41b1-99e5-bc90189e4625.png", glow:"#ffcf3d", scale:1.10, noSpin:true },   // 여섯 보석이 박힌 황금 건틀릿
+      { r:190, drawR:380, img:"7e7ed043-8e64-4e45-9ae2-32d40ddba0b9.png", frames:["7e7ed043-8e64-4e45-9ae2-32d40ddba0b9.png","2449d29f-9729-4f4c-a63a-66b70fd73c74.png","f4ccabb7-dc28-4263-9387-ab31528d8d4f.png"], glow:"#ffcf3d", scale:1.10, noSpin:true },   // 여섯 보석이 박힌 황금 건틀릿 (충돌은 190, 그림은 두 배 크게. frames = 손가락을 튕기는 장면)
     ],
   },
   evolution: { // 9단계 진화: 세포 → 물고기 → 도마뱀 → 공룡 → 원숭이 → 사람(스마트폰 보는 비즈니스맨) → 로봇 → AI → 은하
@@ -343,29 +343,39 @@ let paused = false;
 let uid = 0;
 const imgCache = {};
 
+function kitUrls(name) {
+  const kit = KITS[PRESETS[presetName].kit] || [];
+  return kit.map(b => b + name.split("/").map(encodeURIComponent).join("/"));
+}
 function imageCandidates(t) {
   if (t.image) return [t.image];
-  if (t.img) { const kit = KITS[PRESETS[presetName].kit] || []; return kit.map(b => b + t.img.split("/").map(encodeURIComponent).join("/")); }
+  if (t.img) return kitUrls(t.img);
   return [];
 }
 // 이미지를 후보 URL 순서대로 시도해서 캐시에 넣음. 모두 끝나면(성공/실패 무관) resolve
 function loadImages() {
   const jobs = [];
-  for (const t of TIERS) {
-    const cands = imageCandidates(t); if (!cands.length) continue;
-    const key = cands[0]; t._imgKey = key;
-    if (imgCache[key]) continue;
+  const load = (t, cands, onload) => {
+    const key = cands[0];
+    if (imgCache[key] !== undefined) { onload(key); return; }
     jobs.push(new Promise(res => {
       let i = 0;
       const tryNext = () => {
         if (i >= cands.length) { imgCache[key] = null; res(); return; }
         const im = new Image(); im.crossOrigin = "anonymous";
-        im.onload = () => { imgCache[key] = im; t._sprite = null; res(); };
+        im.onload = () => { imgCache[key] = im; t._sprite = null; t._frames = null; onload(key); res(); };
         im.onerror = () => { i++; tryNext(); };
         im.src = cands[i];
       };
       tryNext();
     }));
+    onload(key);
+  };
+  for (const t of TIERS) {
+    const cands = imageCandidates(t);
+    if (cands.length) load(t, cands, k => { t._imgKey = k; });
+    // 동작 연출용 여벌 그림 (예: 손가락을 튕기는 각 단계). 본체와 같은 규격의 PNG 를 프레임 순서대로 적음
+    if (t.frames) { t._frameKeys = []; t.frames.forEach((f, i) => load(t, kitUrls(f), k => { t._frameKeys[i] = k; })); }
   }
   return Promise.race([Promise.all(jobs), new Promise(r => setTimeout(r, 6000))]);
 }
@@ -777,15 +787,30 @@ const SFX = {
     tone({ f0: f, a: 0.004, d: 0.5, vol: 0.10, verbAmt: 0.9 });
     tone({ f0: f*2, a: 0.004, d: 0.3, vol: 0.04, verbAmt: 0.8 });
   },
-  // 손가락을 튕기는 순간: 딱 하는 소리 뒤에 세상이 한 번 울림
+  // 손목을 뒤로 젖히는 순간: 금속 장갑이 삐걱이며 조여드는 소리
+  creak() {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    noise({ type: "bandpass", f0: 900, f1: 2600, q: 6, a: 0.08, d: 0.22, vol: 0.05, verbAmt: 0.4 });
+    tone({ type: "sawtooth", f0: 150, f1: 260, a: 0.1, d: 0.2, vol: 0.02 });
+  },
+  // 손가락을 튕기는 순간: 딱 하는 소리 뒤에 세상이 통째로 울림 (쇳소리 → 폭발 → 저음 합창)
   snap() {
     if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
-    noise({ type: "highpass", f0: 9000, f1: 2500, a: 0.0005, d: 0.035, vol: 0.3 });          // 딱
-    tone({ type: "triangle", f0: 1400, f1: 380, a: 0.0005, d: 0.05, vol: 0.16 });
-    setTimeout(() => {                                                                        // 뒤늦게 퍼지는 충격
-      tone({ type: "sine", f0: 70, f1: 24, a: 0.01, d: 2.2, vol: 0.3, verbAmt: 0.6 });
-      noise({ type: "lowpass", f0: 1600, f1: 70, q: 0.6, a: 0.02, d: 1.8, vol: 0.18, verbAmt: 1 });
-    }, 70);
+    noise({ type: "highpass", f0: 11000, f1: 2600, a: 0.0004, d: 0.05, vol: 0.34 });         // 딱
+    tone({ type: "triangle", f0: 1900, f1: 380, a: 0.0004, d: 0.07, vol: 0.2 });
+    tone({ type: "square", f0: 2700, f1: 980, a: 0.0004, d: 0.035, vol: 0.07 });             // 금속끼리 부딪히는 쇳소리
+    setTimeout(() => {                                                                        // 바닥이 꺼지는 충격
+      tone({ type: "sine", f0: 96, f1: 20, a: 0.006, d: 3.2, vol: 0.42, verbAmt: 0.7 });
+      tone({ type: "sine", f0: 48, f1: 15, a: 0.02, d: 4, vol: 0.3, verbAmt: 0.8 });
+      noise({ type: "lowpass", f0: 2400, f1: 55, q: 0.6, a: 0.012, d: 2.6, vol: 0.26, verbAmt: 1 });
+    }, 55);
+    setTimeout(() => {                                                                        // 종이 울리듯 퍼지는 금속 배음
+      [1, 2.76, 5.4].forEach((m, i) => tone({ type: "sine", f0: 220*m, f1: 216*m, a: 0.004, d: 2.6 - i*0.5, vol: 0.06 / (i+1), verbAmt: 1 }));
+    }, 90);
+    setTimeout(() => {                                                                        // 뒤이어 밀려오는 저음 합창 (단3화음)
+      [0, 3, 7, 12].forEach(st => tone({ type: "sawtooth", f0: 82.4 * Math.pow(2, st/12), a: 0.35, d: 3, vol: 0.035, verbAmt: 1 }));
+      tone({ type: "sine", f0: 659.3, f1: 493.9, a: 0.5, d: 2.8, vol: 0.045, verbAmt: 1 });
+    }, 220);
   },
   // 재가 되어 흩어지는 소리
   dust() {
@@ -842,7 +867,7 @@ function bounce() { return bounceOverride ?? presetBounce(); }
 function step(dt) {
   const g = gravity(), ph = presetPhysics(), e = bounce(), wob = ph.wobble || 0;
   for (const b of bodies) {
-    if (b.suck || b.collapse != null) continue;      // 블랙홀에 끌려가는 중: 물리 대신 피날레가 위치를 잡음
+    if (b.suck || b.collapse != null || b.pin) continue;   // 피날레가 직접 위치를 잡는 중: 물리 건너뜀
     if (b.inTube) {
       b.vy = tubeSpeed(); b.vx = 0; b.x = BOWL.cx;
       if (b.y > BOWL.neckY) b.inTube = false;      // 그릇으로 진입: 방향을 틀지 않고 그대로 일직선으로 떨어짐
@@ -858,7 +883,7 @@ function step(dt) {
     }
   }
   for (const b of bodies) {
-    if (b.suck || b.collapse != null || b.dust > 0.35) continue;
+    if (b.suck || b.collapse != null || b.pin || b.dust > 0.35) continue;
     // 용기 = 관 기둥 ∪ 원형 그릇. 몸체 일부라도 관 구간에 걸쳐 있으면 관 벽만, 완전히 아래로 내려오면 그릇 벽만 적용
     if (b.y - b.r < BOWL.neckY) {
       const lim = TUBE.half - b.r;
@@ -889,10 +914,10 @@ function step(dt) {
   const merges = [];
   for (let i = 0; i < bodies.length; i++) {
     const a = bodies[i];
-    if (a.suck || a.collapse != null || a.dust > 0.35) continue;
+    if (a.suck || a.collapse != null || a.pin || a.dust > 0.35) continue;
     for (let j = i+1; j < bodies.length; j++) {
       const b = bodies[j];
-      if (b.suck || b.collapse != null || b.dust > 0.35) continue;
+      if (b.suck || b.collapse != null || b.pin || b.dust > 0.35) continue;
       const dx = b.x - a.x, dy = b.y - a.y, rs = a.r + b.r;
       const d2 = dx*dx + dy*dy;
       if (d2 >= rs*rs) continue;
@@ -1073,25 +1098,32 @@ function arrowHit(a) {                                              // 화살이
 // 건틀릿이 나오면 여섯 보석이 하나씩 켜지고, 손가락을 튕기는 순간 남은 것의 정확히 절반이 무작위로 재가 되어 흩어집니다.
 // 살아남은 절반은 그대로 남아 빈자리로 무너져 내립니다 (승리 연출 없음).
 function snapFinale(x, y, palette) {
-  finaleBusy = true; physicsHoldMs = 9000;                          // 무너져 내리는 걸 보여주려고 물리를 더 오래 굴림
-  const glove = bodies.find(b => b.tier === TIERS.length - 1) || { x, y, r: TIERS[TIERS.length-1].r };
+  finaleBusy = true; physicsHoldMs = 11000;                         // 무너져 내리는 걸 보여주려고 물리를 더 오래 굴림
+  const last = TIERS.length - 1;
+  const glove = bodies.find(b => b.tier === last) || { x, y, r: TIERS[last].r };
+  const GR = TIERS[last].drawR || glove.r;                          // 화면에 그려지는 반지름 (충돌 반지름보다 큼)
+  glove.pin = { x: BOWL.cx, y: BOWL.cy };                           // 그릇 한가운데로 미끄러져 와서 멈춤 (가장자리에서 잘리지 않게)
+  glove.grow = 0; glove.frame = 0; glove.jerk = 0;
   const GEMS = ["#a24bff", "#4d7bff", "#ff3b3b", "#ff9a1f", "#39d98a", "#ffd54f"];
   GEMS.forEach((c, i) => later(240 + i*150, () => {                 // 1) 보석이 하나씩 켜짐
-    rings.push({ x: glove.x, y: glove.y, r0: glove.r*0.55, color: c, t: 0 });
+    rings.push({ x: glove.x, y: glove.y, r0: GR*0.45, color: c, t: 0 });
     flash = Math.max(flash, 0.1); SFX.gem(i);
   }));
-  later(1400, () => {                                               // 2) 딱
-    flash = 1; shake = 30; SFX.snap();
+  later(1150, () => { glove.jerk = -0.13; SFX.creak(); });           // 2) 손목을 뒤로 젖힘
+  later(1400, () => {                                               // 3) 딱 — 손가락이 튕겨 나감
+    glove.frame = 1; glove.jerk = 0.34;
+    flash = 1; shake = 36; SFX.snap();
     for (let i = 0; i < 3; i++) rings.push({ x: glove.x, y: glove.y, r0: 120 + i*100, color: ["#ffffff", "#ffd54f", "#a24bff"][i], t: -i*0.12 });
     const rest = bodies.filter(b => b !== glove);
     for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
     const half = Math.round(rest.length / 2);                       // 정확히 절반 (홀수면 올림)
-    rest.slice(0, half).forEach((b, i) => later(90 + i*55, () => {  // 3) 하나씩 재가 되어 흩어짐
+    rest.slice(0, half).forEach((b, i) => later(90 + i*55, () => {  // 4) 하나씩 재가 되어 흩어짐
       if (b.dust != null) return;
       b.dust = 0; if (i % 3 === 0) SFX.dust();
       for (let k = 0; k < 6; k++) ashMote(b);
     }));
   });
+  later(1950, () => { glove.frame = 2; });                          // 5) 손을 펴고 남은 빛이 식어감
 }
 function ashMote(b) {                                               // 흩어지는 재
   const a = Math.random()*Math.PI*2, r = b.r * (0.3 + Math.random()*0.7);
@@ -1493,7 +1525,7 @@ const SHAPES = {
   },
 };
 function makeSprite(t) {
-  const r = t.r, ext = 1.05;
+  const r = t.drawR || t.r, ext = 1.05;   // drawR: 충돌 반지름은 그대로 두고 그림만 크게 그릴 때
   const pad = Math.round(36 + r*0.35), S = Math.ceil((r*ext + pad) * 2);
   const img = t._imgKey && imgCache[t._imgKey];
   const layer = (light) => {
@@ -1529,6 +1561,14 @@ function makeSprite(t) {
   return { base: layer(false), light: layer(true), S };
 }
 function sprite(t) { if (!t._sprite) t._sprite = makeSprite(t); return t._sprite; }
+// 동작 연출용 여벌 그림의 스프라이트 (본체와 같은 방식으로 한 번만 만들어 두고 재사용)
+function frameSprite(t, i) {
+  const key = t._frameKeys && t._frameKeys[i];
+  if (!key || !imgCache[key]) return sprite(t);
+  t._frames = t._frames || [];
+  if (!t._frames[i]) { const save = t._imgKey; t._imgKey = key; t._frames[i] = makeSprite(t); t._imgKey = save; }
+  return t._frames[i];
+}
 // 불타는 연출용: 숯처럼 그을린 스프라이트와 둥근 불빛을 미리 한 번만 그려 두고 재사용 (매 프레임 필터·블러는 너무 느림)
 function charredSprite(t) {
   const sp = sprite(t);
@@ -1614,7 +1654,7 @@ function drawContainer() {
   ctx.drawImage(containerCanvas, 0, 0);
 }
 function drawBody(b) {
-  const t = TIERS[b.tier], sp = sprite(t), h = sp.S/2, k = b.burn, cr = b.crush, sl = b.slain == null ? null : Math.min(1, b.slain);
+  const t = TIERS[b.tier], sp = b.frame != null ? frameSprite(t, b.frame) : sprite(t), h = sp.S/2, k = b.burn, cr = b.crush, sl = b.slain == null ? null : Math.min(1, b.slain);
   const hw = b.howl == null ? null : Math.min(1, b.howl), cry = b.cry == null ? null : Math.min(1, b.cry);
   const sk = b.suck ? Math.min(1, b.suck.p) : null, col = b.collapse == null ? null : Math.min(1, b.collapse);
   const du = b.dust == null ? null : Math.min(1, b.dust);
@@ -1630,6 +1670,8 @@ function drawBody(b) {
     ctx.scale(1 + 0.18*Math.sin(Math.min(1, sl*2)*Math.PI), 1);
     ctx.rotate(sl*sl*1.4); ctx.translate(0, sl*b.r*0.5); ctx.globalAlpha = 1 - sl*sl;
   }
+  if (b.jerk) ctx.rotate(b.jerk);                                            // 손목을 젖혔다가 튕기는 반동
+  if (b.grow != null) { const q = Math.min(1, b.grow); ctx.scale(0.55 + 0.45*q, 0.55 + 0.45*q); }   // 등장하며 커짐
   if (b.aim != null) {                                                       // 활시위를 당기는 중: 뒤로 젖혀지고 팽팽하게 떨림
     const q = Math.min(1, b.aim);
     ctx.rotate(-0.16*q); ctx.translate((Math.random()-.5)*3*q, (Math.random()-.5)*3*q);
@@ -1838,6 +1880,13 @@ function loop(now) {
     if (finaleBusy) {                                            // 피날레에 걸린 요소들의 진행
       let gone = false;
       for (const b of bodies) {
+        if (b.pin) {                                             // 피날레 주인공: 그릇 한가운데로 미끄러져 와서 멈춤
+          b.x += (b.pin.x - b.x) * Math.min(1, frame * 6);
+          b.y += (b.pin.y - b.y) * Math.min(1, frame * 6);
+          b.vx = b.vy = b.av = 0;
+        }
+        if (b.grow != null && b.grow < 1) b.grow = Math.min(1, b.grow + frame * 2.4);   // 등장하며 커짐
+        if (b.jerk) { b.jerk *= Math.pow(0.0007, frame); if (Math.abs(b.jerk) < 0.002) b.jerk = 0; }
         if (b.aim != null) b.aim += frame * 1.3;                 // 시위를 당기는 중
         if (b.cry != null) b.cry += frame * 0.55;                // 늑대가 우는 중
         if (b.suck) {                                            // 나선을 그리며 블랙홀로 끌려감 (가까울수록 빨라짐)
