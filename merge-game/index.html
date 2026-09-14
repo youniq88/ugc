@@ -42,6 +42,7 @@
   <label title="낙하 속도: 관에서 내려오는 속도 (px/s)">낙하 <input id="speed" type="range" min="200" max="2000" step="10"><span id="speedVal"></span></label>
   <label title="분당 발사 수: 1분에 몇 개를 떨어뜨릴지 (관이 막히지 않는 최대치까지만 올라갑니다)">발사 <input id="rate" type="range" min="10" max="1000" step="5"><span id="rateVal"></span></label>
   <label title="중력: 그릇 안에서 아래로 당기는 힘 (px/s²)">중력 <input id="grav" type="range" min="400" max="8000" step="50"><span id="gravVal"></span></label>
+  <label title="관 개수: 요소가 내려오는 통로를 1~3개로 늘립니다 (늘리면 동시에 여러 줄이 떨어져 더 빨리 찹니다)">관 <input id="tubes" type="range" min="1" max="3" step="1"><span id="tubesVal"></span></label>
   <button id="btnHide">UI 숨기기</button>
 </div>
 <div id="savePanel" class="hidden">
@@ -52,7 +53,7 @@
   <button id="btnClose">닫기</button>
 </div>
 <div id="audioHint">🔈 화면을 한 번 탭하면 소리가 켜집니다</div>
-<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화(시작 시 UI 자동 숨김) · Enter: 다시 시작 · URL ?preset=이름 &bounce=0.7 &speed=950 &rate=40 &gravity=2600 &ui=0</div>
+<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화(시작 시 UI 자동 숨김) · Enter: 다시 시작 · URL ?preset=이름 &bounce=0.7 &speed=950 &rate=40 &gravity=2600 &tubes=2 &ui=0</div>
 
 <script>
 /* ============================================================
@@ -319,9 +320,24 @@ canvas.width = W; canvas.height = H;
 
 // 용기 기하: 원형 그릇 + 위쪽 관
 const BOWL = { cx: W/2, cy: 1130, R: 490 };
+let bgCanvas = null, containerCanvas = null;   // 배경·테두리는 한 번만 그려 두고 재사용 (관 개수가 바뀌면 버림)
 const TUBE = { half: 85, top: 0 };
-BOWL.neckY = BOWL.cy - Math.sqrt(BOWL.R*BOWL.R - TUBE.half*TUBE.half);
-const DANGER_Y = BOWL.neckY - 40;   // 이 선 위에서 멈춰있으면 게임오버
+// 관은 1~3개까지. 가운데를 기준으로 한 각 관의 좌우 오프셋 (관 폭 170 이라 사이가 벌어지도록 잡음)
+const TUBE_LAYOUT = { 1: [0], 2: [-150, 150], 3: [-230, 0, 230] };
+let tubeCountOverride = null;
+function tubeCount() { return tubeCountOverride ?? 1; }
+function tubeXs() { return TUBE_LAYOUT[tubeCount()].map(o => BOWL.cx + o); }
+// 관이 그릇 벽에 닿는 깊이. 바깥쪽 벽이 더 깊이 내려가므로 그 값을 쓰면 관 구간 판정이 안전합니다
+function tubeFloorY(x) {
+  const dx = Math.abs(x - BOWL.cx) + TUBE.half;
+  return BOWL.cy - Math.sqrt(Math.max(1, BOWL.R*BOWL.R - dx*dx));
+}
+// 관이 여러 개면 가장 얕은 관의 입구가 먼저 막히므로, 위험선은 그 관을 기준으로 잡습니다
+function layoutTubes() {
+  BOWL.neckY = Math.min(...tubeXs().map(tubeFloorY));   // 가장 얕은 관의 입구 (관이 하나면 예전과 같은 값)
+  bgCanvas = null; containerCanvas = null;              // 용기 모양이 바뀌었으니 미리 그려 둔 그림을 버림
+}
+layoutTubes();
 
 const params = new URLSearchParams(location.search);
 let presetName = params.get("preset") in PRESETS ? params.get("preset") : SETTINGS.preset;
@@ -399,7 +415,7 @@ let speedOverride = null, rateOverride = null, gravOverride = null;
 function tubeSpeed() { return speedOverride ?? SETTINGS.tubeSpeed; }
 function gravity() { return gravOverride ?? SETTINGS.gravity; }
 // 관 안에서 앞뒤가 겹치지 않는 최대 발사 수. 슬라이더를 더 올려도 여기서 막힘
-function maxDropsPerMin() { return 60000 / (dropSpacing() / tubeSpeed() * 1000); }
+function maxDropsPerMin() { return tubeCount() * 60000 / (dropSpacing() / tubeSpeed() * 1000); }
 function dropsPerMin() { return Math.min(rateOverride ?? Infinity, maxDropsPerMin()); }
 
 // 관 안 줄 간격: 떨어뜨리는 단계 중 가장 큰 지름 + tubeGap
@@ -409,9 +425,12 @@ function dropSpacing() {
   return maxR * 2 + SETTINGS.tubeGap;
 }
 function dropIntervalMs() { return 60000 / dropsPerMin(); }
+let dropTube = 0;                                    // 관을 번갈아 가며 씀
 function drop() {
-  const t = nextTier, r = TIERS[t].r;
-  spawn(t, BOWL.cx, -r - 4, 0, tubeSpeed(), true);   // 화면 위에서 등장
+  const t = nextTier, r = TIERS[t].r, xs = tubeXs();
+  dropTube = (dropTube + 1) % xs.length;
+  spawn(t, xs[dropTube], -r - 4, 0, tubeSpeed(), true);   // 화면 위에서 등장
+  bodies[bodies.length-1].tx = xs[dropTube];              // 이 몸체가 타고 내려오는 관
   nextTier = randTier(); lastDrop = gt;
 }
 
@@ -864,13 +883,28 @@ function bounce() { return bounceOverride ?? presetBounce(); }
 { const v = parseFloat(params.get("speed"));   if (!isNaN(v)) speedOverride = Math.min(2000, Math.max(200, v)); }
 { const v = parseFloat(params.get("rate"));    if (!isNaN(v)) rateOverride  = Math.min(1000, Math.max(10, v)); }
 { const v = parseFloat(params.get("gravity")); if (!isNaN(v)) gravOverride  = Math.min(8000, Math.max(400, v)); }
+{ const v = parseInt(params.get("tubes"), 10); if (!isNaN(v)) { tubeCountOverride = Math.min(3, Math.max(1, v)); layoutTubes(); } }
+// 이 몸체를 잡고 있는 관의 가운데 x (관 구간 밖이면 null). 관이 여러 개라 가장 가까운 관으로 판정합니다
+// 이 몸체가 관 입구를 막고 있는지 (관이 여러 개면 자기 아래에 있는 관만 따짐)
+function blocksTube(b) {
+  return tubeXs().some(x => Math.abs(b.x - x) < TUBE.half + b.r && b.y - b.r < tubeFloorY(x) - 40);
+}
+function tubeAt(b) {
+  let best = null, bd = Infinity;
+  for (const x of tubeXs()) {
+    if (b.y - b.r >= tubeFloorY(x)) continue;
+    const d = Math.abs(b.x - x);
+    if (d < bd && d < TUBE.half + b.r) { bd = d; best = x; }
+  }
+  return best;
+}
 function step(dt) {
   const g = gravity(), ph = presetPhysics(), e = bounce(), wob = ph.wobble || 0;
   for (const b of bodies) {
     if (b.suck || b.collapse != null || b.pin) continue;   // 피날레가 직접 위치를 잡는 중: 물리 건너뜀
     if (b.inTube) {
-      b.vy = tubeSpeed(); b.vx = 0; b.x = BOWL.cx;
-      if (b.y > BOWL.neckY) b.inTube = false;      // 그릇으로 진입: 방향을 틀지 않고 그대로 일직선으로 떨어짐
+      b.vy = tubeSpeed(); b.vx = 0; b.x = b.tx ?? BOWL.cx;
+      if (b.y > tubeFloorY(b.x)) b.inTube = false;   // 그릇으로 진입: 방향을 틀지 않고 그대로 일직선으로 떨어짐
     } else {
       b.vy += g * dt;
     }
@@ -884,13 +918,14 @@ function step(dt) {
   }
   for (const b of bodies) {
     if (b.suck || b.collapse != null || b.pin || b.dust > 0.35) continue;
-    // 용기 = 관 기둥 ∪ 원형 그릇. 몸체 일부라도 관 구간에 걸쳐 있으면 관 벽만, 완전히 아래로 내려오면 그릇 벽만 적용
-    if (b.y - b.r < BOWL.neckY) {
+    // 용기 = 관 기둥들 ∪ 원형 그릇. 몸체 일부라도 어느 관 구간에 걸쳐 있으면 그 관 벽만, 완전히 아래로 내려오면 그릇 벽만 적용
+    const tx = tubeAt(b);
+    if (tx != null) {
       const lim = TUBE.half - b.r;
-      if (lim <= 0) { b.x += (BOWL.cx - b.x) * 0.2; b.vx *= 0.9; }
+      if (lim <= 0) { b.x += (tx - b.x) * 0.2; b.vx *= 0.9; }
       else {
-        if (b.x < BOWL.cx - lim) { b.x = BOWL.cx - lim; b.vx = Math.abs(b.vx) * e; }
-        if (b.x > BOWL.cx + lim) { b.x = BOWL.cx + lim; b.vx = -Math.abs(b.vx) * e; }
+        if (b.x < tx - lim) { b.x = tx - lim; b.vx = Math.abs(b.vx) * e; }
+        if (b.x > tx + lim) { b.x = tx + lim; b.vx = -Math.abs(b.vx) * e; }
       }
     } else {
       const dx = b.x - BOWL.cx, dy = b.y - BOWL.cy;
@@ -1606,7 +1641,7 @@ function glowSprite() {
 
 /* ---------- 그래픽: 화면 ---------- */
 const STARS = []; for (let i = 0; i < 90; i++) STARS.push([Math.random()*W, Math.random()*H, Math.random()*1.6 + 0.4, Math.random()]);
-let bgCanvas = null;
+// (bgCanvas 는 위쪽에서 선언됨)
 function buildBackground() {
   bgCanvas = document.createElement("canvas"); bgCanvas.width = W; bgCanvas.height = H;
   const g = bgCanvas.getContext("2d");
@@ -1622,28 +1657,39 @@ function buildBackground() {
   g.fillStyle = ig; g.fillRect(0, 0, W, H); g.restore();
 }
 function containerPathOn(g, inset = 0) {
-  const R = BOWL.R - inset, half = TUBE.half - inset, ang = Math.asin(half / R);
+  const R = BOWL.R - inset, half = TUBE.half - inset;
   g.beginPath();
-  g.moveTo(BOWL.cx - half, TUBE.top - 20);
-  g.lineTo(BOWL.cx - half, BOWL.cy - Math.sqrt(R*R - half*half));
-  g.arc(BOWL.cx, BOWL.cy, R, -Math.PI/2 - ang, -Math.PI/2 + ang, true);
-  g.lineTo(BOWL.cx + half, TUBE.top - 20);
-  g.closePath();
+  for (const x of tubeXs()) g.rect(x - half, TUBE.top - 20, half*2, BOWL.cy - (TUBE.top - 20));   // 관 기둥 (그릇 가운데까지 겹쳐 내림)
+  g.arc(BOWL.cx, BOWL.cy, R, 0, Math.PI*2);                                                      // 그릇
+  // 사각형과 원을 같은 방향으로 그려서 기본 nonzero 규칙으로 합집합이 됩니다
 }
-let containerCanvas = null;   // 용기 테두리는 매 프레임 블러를 다시 그리면 무거워서 한 번만 그려 두고 재사용
+// 용기 테두리는 매 프레임 블러를 다시 그리면 무거워서 한 번만 그려 두고 재사용 (containerCanvas 는 위쪽에서 선언됨)
 function drawContainer() {
   if (!containerCanvas) {
     containerCanvas = document.createElement("canvas"); containerCanvas.width = W; containerCanvas.height = H;
     const g = containerCanvas.getContext("2d");
     const grad = g.createLinearGradient(0, 0, W, H);
     grad.addColorStop(0, SETTINGS.ringColors[0]); grad.addColorStop(1, SETTINGS.ringColors[1]);
-    const ang = Math.asin(TUBE.half / BOWL.R);
+    const xs = tubeXs();
+    // 벽이 그릇에 닿는 지점의 각도 (원의 위쪽 반, -π ~ 0)
+    const wallAng = dx => -Math.acos(Math.max(-1, Math.min(1, dx / BOWL.R)));
+    const wallY = dx => BOWL.cy - Math.sqrt(Math.max(1, BOWL.R*BOWL.R - dx*dx));
     const path = () => {
       g.beginPath();
-      g.moveTo(BOWL.cx - TUBE.half, TUBE.top - 20);
-      g.lineTo(BOWL.cx - TUBE.half, BOWL.neckY);
-      g.arc(BOWL.cx, BOWL.cy, BOWL.R, -Math.PI/2 - ang, -Math.PI/2 + ang, true);
-      g.lineTo(BOWL.cx + TUBE.half, TUBE.top - 20);
+      // 1) 가장 왼쪽 관의 왼쪽 벽 → 그릇을 크게 한 바퀴 → 가장 오른쪽 관의 오른쪽 벽
+      const l0 = xs[0] - TUBE.half, rN = xs[xs.length-1] + TUBE.half;
+      g.moveTo(l0, TUBE.top - 20);
+      g.lineTo(l0, wallY(l0 - BOWL.cx));
+      g.arc(BOWL.cx, BOWL.cy, BOWL.R, wallAng(l0 - BOWL.cx), wallAng(rN - BOWL.cx) - Math.PI*2, true);
+      g.lineTo(rN, TUBE.top - 20);
+      // 2) 관 사이의 틈: 앞 관의 오른쪽 벽 → 그릇 윗면을 따라 짧게 → 다음 관의 왼쪽 벽
+      for (let i = 0; i < xs.length - 1; i++) {
+        const a = xs[i] + TUBE.half, b2 = xs[i+1] - TUBE.half;
+        g.moveTo(a, TUBE.top - 20);
+        g.lineTo(a, wallY(a - BOWL.cx));
+        g.arc(BOWL.cx, BOWL.cy, BOWL.R, wallAng(a - BOWL.cx), wallAng(b2 - BOWL.cx));
+        g.lineTo(b2, TUBE.top - 20);
+      }
     };
     g.lineCap = "round";
     path(); g.strokeStyle = SETTINGS.ringColors[0]; g.globalAlpha = 0.35; g.lineWidth = 22; g.filter = "blur(10px)"; g.stroke();  // 외곽 광
@@ -1858,7 +1904,7 @@ function loop(now) {
       if (gt - lastDrop > dropIntervalMs()) drop();
       while (acc >= FIXED) { step(FIXED); acc -= FIXED; }
       const transitMs = (BOWL.neckY + 40) / tubeSpeed() * 1000;
-      const stuck = bodies.some(b => b.y - b.r < DANGER_Y && gt - b.born > transitMs + 900);
+      const stuck = bodies.some(b => blocksTube(b) && gt - b.born > transitMs + 900);
       if (stuck) { overSince = gt; shake = 20; }
     } else if (gt - overSince > SETTINGS.gameOverHoldMs) reset();
     if (fxQueue.length) {                                        // 예약해 둔 피날레 연출
@@ -1982,10 +2028,20 @@ function syncTuneUI() {
   rateIn.value = Math.min(1000, Math.max(10, Math.round(rateOverride ?? max)));
   rateVal.textContent = Math.round(eff) + (rateOverride != null && rateOverride > max + 0.5 ? " (최대)" : "");
   gravIn.value = gravity(); gravVal.textContent = Math.round(gravity());
+  tubesIn.value = tubeCount(); tubesVal.textContent = tubeCount() + "개";
 }
 speedIn.oninput = () => { speedOverride = parseFloat(speedIn.value); syncTuneUI(); };
 rateIn.oninput  = () => { rateOverride  = parseFloat(rateIn.value);  syncTuneUI(); };
 gravIn.oninput  = () => { gravOverride  = parseFloat(gravIn.value);  syncTuneUI(); };
+// 관 개수 (프리셋을 바꿔도 그대로 둡니다. 무대 설정이라 프리셋과 무관)
+const tubesIn = document.getElementById("tubes"), tubesVal = document.getElementById("tubesVal");
+tubesIn.oninput = () => {
+  tubeCountOverride = parseInt(tubesIn.value, 10);
+  layoutTubes();
+  const xs = tubeXs();                                          // 아직 관을 타고 있는 요소는 가장 가까운 새 관으로 옮김
+  for (const b of bodies) if (b.inTube) b.tx = xs.reduce((p, x) => Math.abs(x - b.x) < Math.abs(p - b.x) ? x : p, xs[0]);
+  dropTube = 0; syncTuneUI();
+};
 syncTuneUI();
 document.getElementById("btnReset").onclick = reset;
 const btnPause = document.getElementById("btnPause");
