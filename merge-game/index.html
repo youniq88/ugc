@@ -84,6 +84,10 @@ const KITS = {
   gummy: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
   ],
+  // 왁뿌볼 프리셋 전용: 안에 든 과일 젤리 7종 (AI 렌더링, 512px 투명 PNG, 같은 CDN)
+  wakppu: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
   // 무기 프리셋 전용: 박물관 전시품 같은 실사 3D 무기 9종 (AI 렌더링, 512px 투명 PNG, 같은 CDN)
   weapons: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
@@ -237,6 +241,18 @@ const PRESETS = {
       { r:134, img:"145680e8-7138-47f8-8d64-272df2b00f43.png", glow:"#ffd9a0", scale:1.06 },   // 라니아케아 초은하단 5억 2,000만 광년
       { r:160, img:"290c964d-994c-414c-a629-90a3165a651d.png", glow:"#8f9dff", scale:1.06 },   // 관측 가능한 우주 930억 광년
       { r:190, drawR:380, img:"7e7ed043-8e64-4e45-9ae2-32d40ddba0b9.png", frames:["7e7ed043-8e64-4e45-9ae2-32d40ddba0b9.png","2449d29f-9729-4f4c-a63a-66b70fd73c74.png","f4ccabb7-dc28-4263-9387-ab31528d8d4f.png"], glow:"#ffcf3d", scale:1.10, noSpin:true },   // 여섯 보석이 박힌 황금 건틀릿 (충돌은 190, 그림은 두 배 크게. frames = 손가락을 튕기는 장면)
+    ],
+  },
+  wakppu: {   // 왁뿌볼 7단계: 흰 왁스막을 씌운 과일 젤리. 네 번 부딪혀야 합쳐진다
+    kit: "wakppu", sound: "wax", shell: true,
+    items: [
+      { r:56,  img:"1f9f6273-a1a6-4404-8267-935d3acbb141.png", glow:"#c874ff", scale:1.10 },   // 포도
+      { r:76,  img:"b4a7e9a7-d4e5-4a94-a750-f7db69629ed4.png", glow:"#ff5a5a", scale:1.10 },   // 딸기
+      { r:100, img:"413a0c13-3c58-4403-815c-b4d4183e64a9.png", glow:"#ff9c2e", scale:1.10 },   // 귤
+      { r:132, img:"6fcc581a-2bc1-43e8-bf73-e9c0f0a42e51.png", glow:"#7fe04a", scale:1.10 },   // 사과
+      { r:170, img:"36a4fac9-1300-4a03-8f41-8ea3b7507d8c.png", glow:"#ff8fb0", scale:1.10 },   // 복숭아
+      { r:212, img:"0545f5e4-8368-424a-b226-dc4ab1edff84.png", glow:"#ffd23d", scale:1.10 },   // 파인애플
+      { r:258, img:"6483e9cf-6c69-47b1-95c1-c54636f8904d.png", glow:"#ff4d6a", scale:1.10 },   // 수박
     ],
   },
   weapons: {  // 9단계 무기의 역사: 구석기 돌망치 → 반물질 폭탄 (16비트 픽셀아트 게임 아이템 스타일)
@@ -429,7 +445,12 @@ function loadImages() {
     // 동작 연출용 여벌 그림 (예: 손가락을 튕기는 각 단계). 본체와 같은 규격의 PNG 를 프레임 순서대로 적음
     if (t.frames) { t._frameKeys = []; t.frames.forEach((f, i) => load(t, kitUrls(f), k => { t._frameKeys[i] = k; })); }
   }
-  return Promise.race([Promise.all(jobs), new Promise(r => setTimeout(r, 6000))]);
+  return Promise.race([Promise.all(jobs), new Promise(r => setTimeout(r, 6000))])
+    .then(() => { if (PRESETS[presetName].shell) bakeShells(); });   // 왁뿌볼 껍질은 미리 구워 둔다
+}
+// 껍질 그림은 처음 만들 때 비싸다. 시작할 때 전부 만들어 두면 경기 중에 끊기지 않는다
+function bakeShells() {
+  for (const t of TIERS) for (let st = 0; st <= 2; st++) for (let v = 0; v < 2; v++) shellSprite(t, st, v);
 }
 function reset() {
   bodies = []; particles = []; popups = []; rings = []; confetti = []; bolts = []; fxQueue = []; drifts = []; score = 0; overSince = 0; flash = 0; ended = false;
@@ -444,7 +465,9 @@ function randTier() {
   return Math.floor(Math.random() * n);
 }
 function spawn(tier, x, y, vx=0, vy=0, inTube=false) {
-  bodies.push({ id: uid++, tier, r: TIERS[tier].r, x, y, vx, vy, inTube, born: gt, rot: 0, av: 0 });
+  const b = { id: uid++, tier, r: TIERS[tier].r, x, y, vx, vy, inTube, born: gt, rot: 0, av: 0 };
+  if (PRESETS[presetName].shell) { b.crack = 0; b.shellVar = b.id % 2; }   // 왁뿌볼: 네 번 부딪혀야 합쳐진다
+  bodies.push(b);
 }
 // 낙하 속도 / 분당 발사 수 / 중력: UI 슬라이더와 URL 로 바꿀 수 있음 (null이면 SETTINGS 기본값)
 let speedOverride = null, rateOverride = null, gravOverride = null;
@@ -472,7 +495,7 @@ function drop() {
 }
 
 /* ---------- 사운드 (Web Audio 합성, 외부 파일 없음) ---------- */
-let actx = null, master = null, recDest = null, verb = null, noiseBuf = null;
+let actx = null, master = null, recDest = null, verb = null, noiseBuf = null, crunchBuf = null;
 let lastHitAt = 0, hitCount = 0;
 function initAudio() {
   if (actx) { if (actx.state !== "running") actx.resume(); return; }
@@ -489,6 +512,7 @@ function initAudio() {
   verb.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(master);
   noiseBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
   const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1;
+  crunchBuf = makeCrunchBuf();
   actx.resume();
   document.getElementById("audioHint").classList.add("hidden");
 }
@@ -507,6 +531,31 @@ function noise({ type="bandpass", f0, f1, q=1, a=0.002, d=0.1, vol=0.2, verbAmt=
   g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
   src.connect(fl); fl.connect(g); g.connect(master); if (verbAmt) { const vg = actx.createGain(); vg.gain.value = verbAmt; g.connect(vg); vg.connect(verb); }
   src.start(t); src.stop(t + a + d + 0.05);
+}
+// 왁스가 바스러지는 알갱이를 한 번만 구워 두고 잘라 쓴다. 발진기를 안 쓰므로 음정이 생기지 않는다
+function makeCrunchBuf() {
+  const SR = actx.sampleRate, len = Math.floor(SR*0.7), b = actx.createBuffer(1, len, SR), d = b.getChannelData(0);
+  let i = 0;
+  while (i < len) {
+    i += Math.floor(SR * (0.0006 + Math.random()*0.0055));                       // 불규칙한 간격
+    if (i >= len) break;
+    const gl = Math.max(2, Math.floor(SR * (0.0012 + Math.random()*0.0055)));
+    const amp = Math.pow(Math.random(), 1.7);                                     // 큰 알갱이는 드물게
+    for (let k = 0; k < gl && i+k < len; k++) d[i+k] += (Math.random()*2-1) * amp * Math.exp(-k/gl*4);
+  }
+  let pk = 0; for (let k = 0; k < len; k++) pk = Math.max(pk, Math.abs(d[k]));
+  for (let k = 0; k < len; k++) d[k] /= pk || 1;
+  return b;
+}
+function crunch({ at = 0, dur, rate = 1, type = "bandpass", f0, f1, q = 0.9, vol = 0.3 }) {
+  const t = actx.currentTime + at, src = actx.createBufferSource(), fl = actx.createBiquadFilter(), g = actx.createGain();
+  src.buffer = crunchBuf; src.playbackRate.value = rate;
+  fl.type = type; fl.Q.value = q; fl.frequency.setValueAtTime(f0, t);
+  if (f1) fl.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(fl); fl.connect(g); g.connect(master);
+  src.start(t, Math.random()*0.35, dur/rate + 0.03); src.stop(t + dur + 0.05);
 }
 const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
 const noteHz = (base, idx) => base * Math.pow(2, PENTA[Math.max(0, Math.min(PENTA.length-1, idx))] / 12);
@@ -587,6 +636,35 @@ const THEMES = {
       noise({ type: "lowpass", f0: 600, f1: 120, q: 0.8, d: 0.3, vol: 0.18, verbAmt: 0.6 });
       if (m.low) tone({ type: "triangle", f0: m.low, a: 0.05, d: 1.5, vol: 0.10, verbAmt: 0.8 });
       if (m.bass) tone({ type: "triangle", f0: m.bass*0.5, a: 0.05, d: 1.8, vol: 0.16, verbAmt: 0.7 });
+    },
+  },
+  wax: {        // 왁뿌볼: 굳은 양초 왁스가 와그자자작 부서지는 소리. 음정 있는 소리는 하나도 쓰지 않는다
+    hit(tier, k) {                                   // 알맹이끼리 스치는 소리는 아주 작게. 깨지는 소리가 주인공이다
+      const f = 300 - tier*18;
+      tone({ type: "triangle", f0: f*1.3, f1: f*0.6, a: 0.003, d: 0.05, vol: 0.025 + 0.055*k });
+      noise({ f0: 1700, f1: 650, q: 2.2, d: 0.03, vol: 0.015 + 0.045*k });
+    },
+    merge() {},                                      // 합칠 때는 소리를 내지 않는다
+    // 1단계 와그자작 / 2단계 와그자자작 / 3단계 와그자자자작 (알맹이가 드러남)
+    crack(stage, tier) {
+      const p = (1 - tier*0.05) * (0.95 + Math.random()*0.10);   // 큰 왁뿌볼일수록 낮게, 매번 조금씩 다르게
+      if (stage === 0) {
+        crunch({ dur: 0.012, rate: 0.42*p, type: "lowpass",  f0: 900*p,  q: 0.6, vol: 0.40 });                       // 와
+        crunch({ at: 0.004, dur: 0.085, rate: 0.60*p, type: "bandpass", f0: 1100*p, f1: 520*p,  q: 0.5, vol: 0.44 }); // 그작
+        crunch({ at: 0.030, dur: 0.17,  rate: 1.30*p, type: "highpass", f0: 2000*p, f1: 4200*p, q: 0.6, vol: 0.26 }); // 자자작
+        noise({ type: "lowpass", f0: 300*p, f1: 100*p, q: 0.7, a: 0.001, d: 0.05, vol: 0.10 });
+      } else if (stage === 1) {
+        crunch({ dur: 0.015, rate: 0.38*p, type: "lowpass",  f0: 820*p,  q: 0.6, vol: 0.44 });
+        crunch({ at: 0.005, dur: 0.12,  rate: 0.52*p, type: "bandpass", f0: 950*p,  f1: 430*p,  q: 0.5, vol: 0.48 });
+        crunch({ at: 0.045, dur: 0.26,  rate: 1.10*p, type: "highpass", f0: 1800*p, f1: 3400*p, q: 0.6, vol: 0.28 });
+        noise({ type: "lowpass", f0: 270*p, f1: 92*p, q: 0.7, a: 0.0015, d: 0.10, vol: 0.13 });
+      } else {
+        crunch({ dur: 0.018, rate: 0.34*p, type: "lowpass",  f0: 740*p,  q: 0.6, vol: 0.48 });
+        crunch({ at: 0.005, dur: 0.17,  rate: 0.46*p, type: "bandpass", f0: 850*p,  f1: 360*p,  q: 0.5, vol: 0.52 });
+        crunch({ at: 0.055, dur: 0.46,  rate: 0.95*p, type: "highpass", f0: 1400*p, f1: 2500*p, q: 0.6, vol: 0.30 });
+        crunch({ at: 0.20,  dur: 0.30,  rate: 1.20*p, type: "highpass", f0: 2800*p, f1: 1600*p, q: 0.6, vol: 0.17 });  // 조각이 한 번 더 쏟아짐
+        noise({ type: "lowpass", f0: 240*p, f1: 80*p, q: 0.7, a: 0.002, d: 0.15, vol: 0.18 });
+      }
     },
   },
   steel: {      // 무기: 쇠붙이 - 부딪히면 금속이 쨍 울리고, 합칠 때 모루를 때리는 듯한 타격과 긴 금속 배음
@@ -779,6 +857,11 @@ const SFX = {
   merge(tier) {
     if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
     this.theme().merge(tier, melodyNext(tier));          // 합칠 때마다 멜로디의 다음 음
+  },
+  // 왁뿌볼 껍질이 깨질 때 (stage 0~2)
+  crack(stage, tier) {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    const th = this.theme(); if (th.crack) th.crack(stage, tier);
   },
   // 번개: 쩍 하는 방전 + 우르릉 울리는 저음 (k = 0~1 세기)
   thunder(k = 1) {
@@ -1025,7 +1108,17 @@ function step(dt) {
       const d2 = dx*dx + dy*dy;
       if (d2 >= rs*rs) continue;
       const d = Math.sqrt(d2) || 1e-6, nx = dx/d, ny = dy/d;
-      if (a.tier === b.tier && !a.dead && !b.dead && !finaleBusy && a.burn == null && b.burn == null) { merges.push([a, b]); a.dead = b.dead = true; continue; }
+      if (a.tier === b.tier && !a.dead && !b.dead && !finaleBusy && a.burn == null && b.burn == null) {
+        if (a.crack != null && (a.crack < 3 || b.crack < 3)) {          // 왁뿌볼: 아직 껍질이 남았으면 한 겹만 깨고 튕겨 나간다
+          if (gt - (a.crackAt || -1e9) > 180 && gt - (b.crackAt || -1e9) > 180) {   // 한 번 닿을 때 한 겹만
+            const st = Math.min(a.crack, b.crack);
+            a.crackAt = b.crackAt = gt;
+            if (a.crack < 3) { a.crack++; waxFlakes(a, nx, ny); }
+            if (b.crack < 3) { b.crack++; waxFlakes(b, -nx, -ny); }
+            SFX.crack(st, a.tier);
+          }
+        } else { merges.push([a, b]); a.dead = b.dead = true; continue; }
+      }
       const ma = a.r*a.r, mb = b.r*b.r, tot = ma + mb;
       const pen = rs - d;
       if (Math.abs(nx) < 0.03) { const kick = (Math.random()-.5) * 80; a.vx -= kick; b.vx += kick; }
@@ -1712,6 +1805,99 @@ function frameSprite(t, i) {
   if (!t._frames[i]) { const save = t._imgKey; t._imgKey = key; t._frames[i] = makeSprite(t); t._imgKey = save; }
   return t._frames[i];
 }
+/* ---------- 왁뿌볼 껍질 ---------- */
+// 알맹이 실루엣을 두께만큼만 부풀려 흰 왁스로 채운다. 단계 × 무늬 3종을 한 번만 만들어 두고 돌려 쓴다
+function rnd32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a>>>15, 1|a); t = t + Math.imul(t ^ t>>>7, 61|t) ^ t; return ((t ^ t>>>14) >>> 0) / 4294967296; }; }
+function crackLine(rng, R, px, py, ang, len) {                        // 가장자리로 뻗어 나가는 지그재그 금
+  const pts = [[px, py]]; let x = px, y = py, a = ang;
+  const steps = 5 + Math.floor(rng()*3);
+  for (let i = 0; i < steps; i++) {
+    a += (rng() - 0.5) * 0.85;
+    const sp = len/steps * (0.7 + rng()*0.6);
+    x += Math.cos(a)*sp; y += Math.sin(a)*sp; pts.push([x, y]);
+    if (Math.hypot(x, y) > R*1.15) break;
+  }
+  return pts;
+}
+function strokeCrack(g, pts, w, mode) {
+  g.globalCompositeOperation = mode; g.lineJoin = g.lineCap = "round"; g.lineWidth = w;
+  g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+  g.stroke();
+}
+function crackChip(g, rng, px, py, size, mode, grow) {                // 떨어져 나간 잔 조각
+  const n = 5 + Math.floor(rng()*3), pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = i/n*Math.PI*2 + rng()*0.5, r = size*(0.55 + rng()*0.6) + (grow || 0);
+    pts.push([px + Math.cos(a)*r, py + Math.sin(a)*r]);
+  }
+  g.globalCompositeOperation = mode;
+  g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+  g.closePath(); g.fill();
+}
+function shellSprite(t, stage, variant) {
+  const key = stage*2 + variant;
+  t._shell = t._shell || [];
+  if (t._shell[key]) return t._shell[key];
+  const sp = sprite(t), S = sp.S, c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d"), img = t._imgKey && imgCache[t._imgKey];
+  if (!img || !img.complete || !img.naturalWidth) return c;           // 그림이 아직 안 왔으면 캐시하지 않는다
+  const k = (t.scale || 1.12) * (t.drawR || t.r), d = Math.max(2, k*0.055), R = k + d;
+  g.translate(S/2, S/2);
+  for (let i = 0; i < 20; i++) { const a = i/20*Math.PI*2; g.drawImage(img, -k + Math.cos(a)*d, -k + Math.sin(a)*d, 2*k, 2*k); }
+  g.drawImage(img, -k, -k, 2*k, 2*k);                                  // 두께만큼 부풀린 실루엣
+  g.globalCompositeOperation = "source-in";
+  const q = g.createRadialGradient(-R*0.30, -R*0.34, R*0.05, 0, 0, R);
+  q.addColorStop(0,    "rgba(255,254,250,0.70)");                      // 양초 왁스: 매트한 미색, 오퍼시티 70%
+  q.addColorStop(0.6,  "rgba(252,250,245,0.68)");
+  q.addColorStop(0.92, "rgba(248,245,238,0.72)");
+  q.addColorStop(1,    "rgba(255,253,247,0.80)");
+  g.fillStyle = q; g.fillRect(-S/2, -S/2, S, S);
+  g.globalCompositeOperation = "source-atop";
+  const hl = g.createRadialGradient(-R*0.28, -R*0.36, 0, -R*0.28, -R*0.36, R*0.72);
+  hl.addColorStop(0, "rgba(255,255,255,0.26)"); hl.addColorStop(1, "rgba(255,255,255,0)");   // 넓고 옅은 윤기
+  g.fillStyle = hl; g.fillRect(-S/2, -S/2, S, S);
+  const hits = stage, w = Math.max(1.3, R*0.030);
+  for (let h = 0; h < hits; h++) {
+    const rh = rnd32((variant*977 + Math.round(t.r))*7919 + h*131);
+    const a0 = rh()*Math.PI*2, dd = R*(0.18 + rh()*0.28);
+    const px = Math.cos(a0)*dd, py = Math.sin(a0)*dd;
+    const arms = 8 + Math.floor(rh()*3) + (h === 1 ? 3 : 0);
+    for (let i = 0; i < arms; i++) {
+      const pts = crackLine(rh, R, px, py, i/arms*Math.PI*2 + rh()*0.5, R*(0.55 + rh()*0.7));
+      g.strokeStyle = "rgba(255,255,255,0.9)"; strokeCrack(g, pts, w*1.9, "source-atop");
+      strokeCrack(g, pts, w, "destination-out");
+      const m = Math.max(1, Math.floor(pts.length*0.45));               // 중간에서 갈라져 나오는 잔가지
+      if (m + 1 < pts.length) {
+        const ang = Math.atan2(pts[m][1]-pts[m-1][1], pts[m][0]-pts[m-1][0]) + (rh() < 0.5 ? 0.8 : -0.8);
+        const br = crackLine(rh, R, pts[m][0], pts[m][1], ang, R*(0.22 + rh()*0.3));
+        g.strokeStyle = "rgba(255,255,255,0.9)"; strokeCrack(g, br, w*1.5, "source-atop");
+        strokeCrack(g, br, w*0.75, "destination-out");
+      }
+    }
+    const flakeN = h === 1 ? 9 : 4;                                     // 부슬부슬 떨어져 나간 잔 조각
+    for (let i = 0; i < flakeN; i++) {
+      const a = rh()*Math.PI*2, r = R*(0.05 + 0.45*rh());
+      const fx = px + Math.cos(a)*r, fy = py + Math.sin(a)*r, sz = R*(0.05 + rh()*0.09);
+      const rs = rnd32((variant*977 + Math.round(t.r))*7919 + h*131 + i*17);
+      g.fillStyle = "rgba(255,255,255,0.9)";
+      crackChip(g, rs, fx, fy, sz, "source-atop", w*0.9);
+      crackChip(g, rnd32((variant*977 + Math.round(t.r))*7919 + h*131 + i*17), fx, fy, sz, "destination-out", 0);
+    }
+  }
+  t._shell[key] = c;
+  return c;
+}
+// 껍질이 깨질 때 튀는 흰 부스러기
+function waxFlakes(b, nx, ny) {
+  const n = 5 + Math.floor(b.r/22), px = b.x + nx*b.r*0.9, py = b.y + ny*b.r*0.9;
+  for (let i = 0; i < n; i++) {
+    const a = Math.atan2(ny, nx) + (Math.random()-.5)*2.2, sp = 90 + Math.random()*260;
+    particles.push({ x: px, y: py, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 40, life: 1, color: "#fffdf4", size: 2 + Math.random()*4, spin: Math.random()*Math.PI });
+  }
+}
 // 불타는 연출용: 숯처럼 그을린 스프라이트와 둥근 불빛을 미리 한 번만 그려 두고 재사용 (매 프레임 필터·블러는 너무 느림)
 function charredSprite(t) {
   const sp = sprite(t);
@@ -1892,6 +2078,7 @@ function drawBody(b) {
       ctx.globalAlpha = ash;     ctx.drawImage(ashenSprite(t), -h, -h);
       ctx.globalAlpha = 1;
     }
+    if (b.crack != null && b.crack < 3) ctx.drawImage(shellSprite(t, b.crack, b.shellVar), -h, -h);   // 왁뿌볼: 아직 덮여 있는 왁스막
     ctx.restore();
     if (ash != null) ctx.globalAlpha = 1 - ash;
     else if (sl != null) ctx.globalAlpha = 1 - sl*sl;
