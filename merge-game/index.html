@@ -639,12 +639,8 @@ const THEMES = {
     },
   },
   wax: {        // 왁뿌볼: 굳은 양초 왁스가 와그자자작 부서지는 소리. 음정 있는 소리는 하나도 쓰지 않는다
-    hit(tier, k) {                                   // 알맹이끼리 스치는 소리는 아주 작게. 깨지는 소리가 주인공이다
-      const f = 300 - tier*18;
-      tone({ type: "triangle", f0: f*1.3, f1: f*0.6, a: 0.003, d: 0.05, vol: 0.025 + 0.055*k });
-      noise({ f0: 1700, f1: 650, q: 2.2, d: 0.03, vol: 0.015 + 0.045*k });
-    },
-    merge() {},                                      // 합칠 때는 소리를 내지 않는다
+    hit() {},                                        // 부딪히는 소리도 내지 않는다. 깨지는 소리를 덮어 버린다
+    merge() {},                                      // 합칠 때도 소리를 내지 않는다
     // 1단계 와그자작 / 2단계 와그자자작 / 3단계 와그자자자작 (알맹이가 드러남)
     crack(stage, tier) {
       const p = (1 - tier*0.05) * (0.95 + Math.random()*0.10);   // 큰 왁뿌볼일수록 낮게, 매번 조금씩 다르게
@@ -858,8 +854,8 @@ const SFX = {
     if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
     this.theme().merge(tier, melodyNext(tier));          // 합칠 때마다 멜로디의 다음 음
   },
-  // 왁뿌볼 껍질이 깨질 때 (stage 0~2)
-  crack(stage, tier) {
+  // 왁뿌볼 껍질이 깨질 때 (stage 0~2). 아래 crack() 과 이름이 겹치지 않게 따로 둔다
+  shellCrack(stage, tier) {
     if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
     const th = this.theme(); if (th.crack) th.crack(stage, tier);
   },
@@ -1115,7 +1111,7 @@ function step(dt) {
             a.crackAt = b.crackAt = gt;
             if (a.crack < 3) { a.crack++; waxFlakes(a, nx, ny); }
             if (b.crack < 3) { b.crack++; waxFlakes(b, -nx, -ny); }
-            SFX.crack(st, a.tier);
+            SFX.shellCrack(st, a.tier);
           }
         } else { merges.push([a, b]); a.dead = b.dead = true; continue; }
       }
