@@ -243,16 +243,18 @@ const PRESETS = {
       { r:190, drawR:380, img:"7e7ed043-8e64-4e45-9ae2-32d40ddba0b9.png", frames:["7e7ed043-8e64-4e45-9ae2-32d40ddba0b9.png","2449d29f-9729-4f4c-a63a-66b70fd73c74.png","f4ccabb7-dc28-4263-9387-ab31528d8d4f.png"], glow:"#ffcf3d", scale:1.10, noSpin:true },   // 여섯 보석이 박힌 황금 건틀릿 (충돌은 190, 그림은 두 배 크게. frames = 손가락을 튕기는 장면)
     ],
   },
-  wakppu: {   // 왁뿌볼 7단계: 흰 왁스막을 씌운 과일 젤리. 네 번 부딪혀야 합쳐진다
-    kit: "wakppu", sound: "wax", shell: true,
+  wakppu: {   // 왁뿌볼 9단계: 흰 왁스막을 씌운 과일 젤리. 네 번 부딪혀야 합쳐지고, 마지막은 거대 두리안
+    kit: "wakppu", sound: "wax", shell: true, finale: "durian",
     items: [
-      { r:56,  img:"1f9f6273-a1a6-4404-8267-935d3acbb141.png", glow:"#c874ff", scale:1.10 },   // 포도
-      { r:76,  img:"b4a7e9a7-d4e5-4a94-a750-f7db69629ed4.png", glow:"#ff5a5a", scale:1.10 },   // 딸기
-      { r:100, img:"413a0c13-3c58-4403-815c-b4d4183e64a9.png", glow:"#ff9c2e", scale:1.10 },   // 귤
-      { r:132, img:"6fcc581a-2bc1-43e8-bf73-e9c0f0a42e51.png", glow:"#7fe04a", scale:1.10 },   // 사과
-      { r:170, img:"36a4fac9-1300-4a03-8f41-8ea3b7507d8c.png", glow:"#ff8fb0", scale:1.10 },   // 복숭아
-      { r:212, img:"0545f5e4-8368-424a-b226-dc4ab1edff84.png", glow:"#ffd23d", scale:1.10 },   // 파인애플
-      { r:258, img:"6483e9cf-6c69-47b1-95c1-c54636f8904d.png", glow:"#ff4d6a", scale:1.10 },   // 수박
+      { r:52,  img:"1f9f6273-a1a6-4404-8267-935d3acbb141.png", glow:"#c874ff", scale:1.10 },   // 포도
+      { r:68,  img:"b4a7e9a7-d4e5-4a94-a750-f7db69629ed4.png", glow:"#ff5a5a", scale:1.10 },   // 딸기
+      { r:88,  img:"413a0c13-3c58-4403-815c-b4d4183e64a9.png", glow:"#ff9c2e", scale:1.10 },   // 귤
+      { r:112, img:"6fcc581a-2bc1-43e8-bf73-e9c0f0a42e51.png", glow:"#7fe04a", scale:1.10 },   // 사과
+      { r:140, img:"36a4fac9-1300-4a03-8f41-8ea3b7507d8c.png", glow:"#ff8fb0", scale:1.10 },   // 복숭아
+      { r:172, img:"0545f5e4-8368-424a-b226-dc4ab1edff84.png", glow:"#ffd23d", scale:1.10 },   // 파인애플
+      { r:208, img:"45f1b740-9496-4de6-8ff3-ff546a4d6e68.png", glow:"#b8f07a", scale:1.10 },   // 멜론
+      { r:248, img:"6483e9cf-6c69-47b1-95c1-c54636f8904d.png", glow:"#ff4d6a", scale:1.10 },   // 수박
+      { r:292, img:"e7aa5fd2-f5f6-4d3a-bb0b-9a82d62c6ca0.png", glow:"#ffc24d", scale:1.10 },   // 거대 두리안
     ],
   },
   weapons: {  // 9단계 무기의 역사: 구석기 돌망치 → 반물질 폭탄 (16비트 픽셀아트 게임 아이템 스타일)
@@ -899,6 +901,17 @@ const SFX = {
     tone({ type: "sawtooth", f0: 220, f1: 90, a: 0.05, d: 0.3, vol: 0.05, verbAmt: 0.6 });
     noise({ type: "bandpass", f0: 1200, f1: 400, q: 6, a: 0.05, d: 0.3, vol: 0.06, verbAmt: 0.5 });
   },
+  // 두리안이 팡 터지는 순간: 왁스가 한꺼번에 부서지며 사방으로 흩날림
+  waxPop() {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    crunch({ dur: 0.05, rate: 0.30, type: "lowpass",  f0: 700,  q: 0.6, vol: 0.55 });                        // 터지는 순간
+    crunch({ at: 0.012, dur: 0.55, rate: 0.90, type: "highpass", f0: 1200, f1: 3200, q: 0.6, vol: 0.45 });   // 쏟아지는 조각
+    crunch({ at: 0.10,  dur: 0.85, rate: 1.35, type: "highpass", f0: 3400, f1: 1500, q: 0.6, vol: 0.30 });   // 멀리까지 흩날림
+    noise({ type: "lowpass",  f0: 260, f1: 70,   q: 0.7, a: 0.002, d: 0.32, vol: 0.34 });                    // 묵직한 몸통
+    noise({ type: "bandpass", f0: 900, f1: 5200, q: 0.9, a: 0.004, d: 0.20, vol: 0.20 });                    // 위로 솟구치는 바람
+    for (let i = 0; i < 10; i++)                                                                             // 반짝이며 떨어지는 부스러기
+      setTimeout(() => noise({ type: "highpass", f0: 7000 - i*280, f1: 4000, q: 1, a: 0.001, d: 0.02, vol: 0.10 - i*0.008 }), 130 + i*60);
+  },
   // 찌그러지다 터지는 순간
   crack() {
     if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
@@ -1180,6 +1193,7 @@ function finale(x, y, color) {
   if (kind === "vortex")    { vortexFinale(x, y, palette); return; }      // 블랙홀이 전부 빨아들이고 화면이 닫힘
   if (kind === "snap")      { snapFinale(x, y, palette); return; }        // 손가락을 튕겨 절반이 사라짐
   if (kind === "annihilate"){ annihilateFinale(x, y, palette); return; }  // 반물질이 터져 전부 사라짐
+  if (kind === "durian")    { durianFinale(x, y, palette); return; }      // 두리안 왁스가 저절로 갈라지다 팡 터짐
   confettiBurst(x, y, palette);
   setTimeout(() => SFX.merge(TIERS.length - 1), 0); setTimeout(() => SFX.merge(TIERS.length - 2), 180); setTimeout(() => SFX.merge(TIERS.length - 1), 360);
 }
@@ -1192,6 +1206,43 @@ function confettiBurst(x, y, palette) {                             // 색종이
 }
 // URL ?finale=lightning / ?finale=confetti 로 프리셋 기본값을 덮어쓸 수 있음
 function finaleKind() { return params.get("finale") || PRESETS[presetName].finale || "confetti"; }
+
+/* ---------- 두리안 피날레 (왁뿌볼) ---------- */
+// 거대 두리안이 나오면 부딪히지 않아도 왁스가 저절로 갈라지고, 마지막에 팡 터지며 축하가 쏟아짐
+function durianFinale(x, y, palette) {
+  finaleBusy = true; physicsHoldMs = 9000;
+  const last = TIERS.length - 1;
+  const king = bodies.find(b => b.tier === last) || { x, y, r: TIERS[last].r, tier: last };
+  king.pin = { x: BOWL.cx, y: BOWL.cy - BOWL.R*0.08 };            // 한가운데로 미끄러져 와서 멈춤
+  const scatter = (b, n) => { for (let k = 0; k < n; k++) { const a = Math.random()*Math.PI*2; waxFlakes(b, Math.cos(a), Math.sin(a)); } };
+  [350, 1050, 1750].forEach((ms, i) => later(ms, () => {          // 1) 부딪히지 않아도 한 겹씩 저절로 갈라짐
+    king.crack = i + 1;
+    SFX.shellCrack(i, last);
+    shake = Math.max(shake, 5 + i*6); flash = Math.max(flash, 0.05 + i*0.05);
+    scatter(king, 8 + i*9);
+  }));
+  later(2300, () => { king.pop = 0.55; SFX.shellCrack(2, last); shake = Math.max(shake, 12); scatter(king, 14); });   // 2) 터지기 직전 부르르 떨림
+  later(2850, () => {                                              // 3) 팡!
+    flash = 1; shake = 48; king.pop = 1; SFX.waxPop();
+    ["#fffdf4", "#ffd23d", "#ff8fb0", "#7fe04a"].forEach((c, i) =>
+      rings.push({ x: king.x, y: king.y, r0: 90 + i*140, color: c, t: -i*0.08 }));
+    confettiBurst(king.x, king.y, palette);
+    for (let i = 0; i < 90; i++) {                                 // 사방으로 터져 나가는 왁스 조각
+      const a = Math.random()*Math.PI*2, sp = 500 + Math.random()*1400;
+      particles.push({ x: king.x, y: king.y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 1.6,
+                       color: "#fffdf4", size: 3 + Math.random()*8, spin: Math.random()*Math.PI });
+    }
+    for (const b of bodies) {                                      // 나머지 껍질도 한꺼번에 깨져 바깥으로 밀려남
+      if (b === king) continue;
+      if (b.crack != null && b.crack < 3) { b.crack = 3; scatter(b, 6); }
+      const a = Math.atan2(b.y - king.y, b.x - king.x), sp = 380 + Math.random()*520;
+      b.vx += Math.cos(a)*sp; b.vy += Math.sin(a)*sp - 220;
+    }
+  });
+  later(3200, () => confettiBurst(BOWL.cx - BOWL.R*0.6, BOWL.cy, palette));        // 4) 양옆에서 한 번 더
+  later(3520, () => confettiBurst(BOWL.cx + BOWL.R*0.6, BOWL.cy, palette));
+  later(3900, () => { confettiBurst(king.x, king.y - 90, palette); SFX.waxPop(); shake = Math.max(shake, 20); flash = Math.max(flash, 0.5); });
+}
 
 /* ---------- 번개 피날레 (제우스) ---------- */
 // 하늘에서 제우스에게 번개가 내리꽂힌 뒤, 제우스가 남은 요소를 가까운 것부터 하나씩 태워 없앰
