@@ -245,16 +245,18 @@ const PRESETS = {
   },
   wakppu: {   // 왁뿌볼 9단계: 흰 왁스막을 씌운 과일 젤리. 네 번 부딪혀야 합쳐지고, 마지막은 거대 두리안
     kit: "wakppu", sound: "wax", shell: true, finale: "durian",
+    physics: { restitution: 0.3 },   // 왁스를 씌운 공이라 통통 튀지 않고 툭 떨어진다. 덜 튀어야 그릇이 넘치지 않는다
+    dropTiers: 5, rate: 150,   // 네 번씩 부딪혀야 합쳐지므로 아래 다섯 단계를 섞어 떨어뜨린다. 한 종류만 떨어뜨리면 그릇이 넘치기 전에 두리안까지 못 간다
     items: [
-      { r:52,  img:"1f9f6273-a1a6-4404-8267-935d3acbb141.png", glow:"#c874ff", scale:1.10 },   // 포도
-      { r:68,  img:"b4a7e9a7-d4e5-4a94-a750-f7db69629ed4.png", glow:"#ff5a5a", scale:1.10 },   // 딸기
-      { r:88,  img:"413a0c13-3c58-4403-815c-b4d4183e64a9.png", glow:"#ff9c2e", scale:1.10 },   // 귤
-      { r:112, img:"6fcc581a-2bc1-43e8-bf73-e9c0f0a42e51.png", glow:"#7fe04a", scale:1.10 },   // 사과
-      { r:140, img:"36a4fac9-1300-4a03-8f41-8ea3b7507d8c.png", glow:"#ff8fb0", scale:1.10 },   // 복숭아
-      { r:172, img:"0545f5e4-8368-424a-b226-dc4ab1edff84.png", glow:"#ffd23d", scale:1.10 },   // 파인애플
-      { r:208, img:"45f1b740-9496-4de6-8ff3-ff546a4d6e68.png", glow:"#b8f07a", scale:1.10 },   // 멜론
-      { r:248, img:"6483e9cf-6c69-47b1-95c1-c54636f8904d.png", glow:"#ff4d6a", scale:1.10 },   // 수박
-      { r:292, img:"e7aa5fd2-f5f6-4d3a-bb0b-9a82d62c6ca0.png", glow:"#ffc24d", scale:1.10 },   // 거대 두리안
+      { r:32,  img:"1f9f6273-a1a6-4404-8267-935d3acbb141.png", glow:"#c874ff", scale:1.10 },   // 포도
+      { r:41,  img:"b4a7e9a7-d4e5-4a94-a750-f7db69629ed4.png", glow:"#ff5a5a", scale:1.10 },   // 딸기
+      { r:52,  img:"413a0c13-3c58-4403-815c-b4d4183e64a9.png", glow:"#ff9c2e", scale:1.10 },   // 귤
+      { r:64,  img:"6fcc581a-2bc1-43e8-bf73-e9c0f0a42e51.png", glow:"#7fe04a", scale:1.10 },   // 사과
+      { r:76,  img:"36a4fac9-1300-4a03-8f41-8ea3b7507d8c.png", glow:"#ff8fb0", scale:1.10 },   // 복숭아 (여기까지 관을 통과한다)
+      { r:94,  img:"0545f5e4-8368-424a-b226-dc4ab1edff84.png", glow:"#ffd23d", scale:1.10 },   // 파인애플
+      { r:116, img:"45f1b740-9496-4de6-8ff3-ff546a4d6e68.png", glow:"#b8f07a", scale:1.10 },   // 멜론
+      { r:145, img:"6483e9cf-6c69-47b1-95c1-c54636f8904d.png", glow:"#ff4d6a", scale:1.10 },   // 수박
+      { r:260, img:"e7aa5fd2-f5f6-4d3a-bb0b-9a82d62c6ca0.png", glow:"#ffc24d", scale:1.10 },   // 거대 두리안 (수박 두 개가 합쳐지면 확 커진다)
     ],
   },
   weapons: {  // 9단계 무기의 역사: 구석기 돌망치 → 반물질 폭탄 (16비트 픽셀아트 게임 아이템 스타일)
@@ -460,9 +462,11 @@ function reset() {
   moon = null; nightDim = 0; nightDimTo = 0; voidDim = 0; voidDimTo = 0; whiteDim = 0; whiteDimTo = 0; whiteFall = 1.2; physicsHoldMs = 3000;
   nextTier = randTier(); lastDrop = gt; melodyIdx = 0;   // 멜로디도 처음부터
 }
+// 떨어뜨릴 단계 수: 프리셋이 dropTiers 를 갖고 있으면 그걸 먼저 쓴다 (왁뿌볼은 5)
+function dropTiers() { return PRESETS[presetName].dropTiers ?? SETTINGS.dropTiers; }
 function randTier() {
   // 관(TUBE)을 통과할 수 있는 크기의 단계만 떨어뜨림
-  let n = Math.min(SETTINGS.dropTiers, TIERS.length);
+  let n = Math.min(dropTiers(), TIERS.length);
   while (n > 1 && TIERS[n-1].r >= TUBE.half - 4) n--;
   return Math.floor(Math.random() * n);
 }
@@ -477,12 +481,12 @@ function tubeSpeed() { return speedOverride ?? SETTINGS.tubeSpeed; }
 function gravity() { return gravOverride ?? SETTINGS.gravity; }
 // 관 안에서 앞뒤가 겹치지 않는 최대 발사 수. 슬라이더를 더 올려도 여기서 막힘
 function maxDropsPerMin() { return tubeCount() * 60000 / (dropSpacing() / tubeSpeed() * 1000); }
-function dropsPerMin() { return Math.min(rateOverride ?? Infinity, maxDropsPerMin()); }
+function dropsPerMin() { return Math.min(rateOverride ?? PRESETS[presetName].rate ?? Infinity, maxDropsPerMin()); }   // 프리셋이 rate 를 갖고 있으면 그만큼만 떨어뜨린다
 
 // 관 안 줄 간격: 떨어뜨리는 단계 중 가장 큰 지름 + tubeGap
 function dropSpacing() {
   let maxR = 0;
-  for (let i = 0; i < Math.min(SETTINGS.dropTiers, TIERS.length); i++) if (TIERS[i].r < TUBE.half - 4) maxR = Math.max(maxR, TIERS[i].r);
+  for (let i = 0; i < Math.min(dropTiers(), TIERS.length); i++) if (TIERS[i].r < TUBE.half - 4) maxR = Math.max(maxR, TIERS[i].r);
   return maxR * 2 + SETTINGS.tubeGap;
 }
 function dropIntervalMs() { return 60000 / dropsPerMin(); }
