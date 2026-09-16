@@ -51,7 +51,7 @@
   <button id="btnClose">닫기</button>
 </div>
 <div id="audioHint">🔈 화면을 한 번 탭하면 소리가 켜집니다</div>
-<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화 · Enter: 다시 시작 · URL ?preset=fruits &open=150 &cycle=600 &ball=20 &goal=460 &ui=0</div>
+<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화 · Enter: 다시 시작 · URL ?preset=fruits &open=150 &cycle=700 &ball=20 &goal=460 &ui=0</div>
 
 <script src="presets.js"></script>
 <script>
@@ -72,7 +72,7 @@ const SETTINGS = {
   pack: 0.80,            // 원 넓이 대비 공이 차지할 비율. 빽빽할수록 압착기 입이 늘 꽉 차서 빨리 불어난다
   openW: 150,            // 압착기가 벌어지는 너비의 절반 (px, 60~280). 보이는 크기를 정한다.
                          // 넓혀도 걸리는 시간은 거의 그대로다 (80·150·240 에서 37.4 / 36.7 / 37.9초)
-  cycleMs: 600,          // 한 번 눌렀다 열리기까지
+  cycleMs: 700,          // 한 번 눌렀다 열리기까지. 이 중 55%가 지긋이 밀고 들어가는 시간
   restitution: 0.86,     // 공끼리 튀는 정도
   wallBounce: 0.88,      // 원 벽에 튀는 정도
   soundVolume: 0.8,
@@ -206,10 +206,11 @@ function noise({ type="bandpass", f0, f1, q=1, a=0.002, d=0.1, vol=0.2, at=0 }) 
 }
 const SFX = {
   ready() { return actx && actx.state === "running" && SETTINGS.soundVolume > 0; },
-  servo() {                                              // 벽이 밀려 들어오는 유압 소리
+  servo(dur) {                                           // 지긋이 밀고 들어가는 동안 계속 나는 유압 소리
     if (!this.ready()) return;
-    noise({ type: "bandpass", f0: 320, f1: 1500, q: 1.4, a: 0.03, d: 0.26, vol: 0.075 });
-    tone({ type: "sawtooth", f0: 58, f1: 104, a: 0.03, d: 0.26, vol: 0.05 });
+    const d = Math.max(0.15, dur || 0.26);
+    noise({ type: "bandpass", f0: 300, f1: 1400, q: 1.5, a: d*0.3, d: d, vol: 0.08 });
+    tone({ type: "sawtooth", f0: 54, f1: 98, a: d*0.3, d: d, vol: 0.055 });
   },
   clank() {                                              // 다 닫힐 때 쇠끼리 부딪히는 소리
     if (!this.ready()) return;
@@ -250,15 +251,16 @@ const SFX = {
 };
 
 /* ---------- 압착기 ---------- */
-const easeIn  = t => t*t;
 const easeOut = t => 1 - (1-t)*(1-t);
-// 주기 안에서의 구간: 0~0.30 닫힘, 0.30~0.42 물고 있음, 0.42~0.72 열림, 나머지는 벌린 채 대기
+// 주기 안에서의 구간. 누를 때는 처음부터 끝까지 같은 속도로 지긋이 밀고 들어간다(가속 없음).
+// 벌릴 때만 빠르게 놓아 준다
+const PHASE = { close: 0.55, hold: 0.62, open: 0.86 };   // 0.86 뒤는 벌린 채 대기
 function pressHalfW() {
   const t = pressT;
   if (ended) return PRESS.closeHalf;
-  if (t < 0.16)      return PRESS.openHalf + (PRESS.closeHalf - PRESS.openHalf) * easeIn(t/0.16);
-  if (t < 0.26)      return PRESS.closeHalf;
-  if (t < 0.46)      return PRESS.closeHalf + (PRESS.openHalf - PRESS.closeHalf) * easeOut((t-0.26)/0.20);
+  if (t < PHASE.close) return PRESS.openHalf + (PRESS.closeHalf - PRESS.openHalf) * (t / PHASE.close);
+  if (t < PHASE.hold)  return PRESS.closeHalf;
+  if (t < PHASE.open)  return PRESS.closeHalf + (PRESS.openHalf - PRESS.closeHalf) * easeOut((t - PHASE.hold) / (PHASE.open - PHASE.hold));
   return PRESS.openHalf;
 }
 // 압착기를 이루는 네모들: 양옆 벽 + 위아래 귀퉁이 브래킷 네 개.
@@ -351,6 +353,15 @@ function step(dt, wallV) {
     }
   }
 
+  if (pressT < PHASE.hold && !ended) {                           // 미는 동안 입 안의 공은 붙잡혀 있다
+    const hold = Math.pow(0.02, dt);
+    for (const b of balls) {
+      if (Math.abs(b.y - PRESS.cy) > PRESS.halfH - 3) continue;
+      if (Math.abs(b.x - ARENA.cx) > gap + r) continue;
+      b.vx *= hold; b.vy *= hold; b.slow = 0;
+    }
+  }
+
   // 공끼리: 격자로 이웃만 본다
   grid.clear();
   const cell = r*2;
@@ -381,9 +392,9 @@ function step(dt, wallV) {
 
 }
 
-// 무는 순간. 주기 안에서 CRUSH_T 를 지나는 프레임에 딱 한 번 부른다.
-// (매 프레임 폭만 보고 판단하면 창이 한 프레임보다 좁아져서 그냥 지나쳐 버린다)
-const CRUSH_T = 0.14;
+// 무는 순간: 벽 사이 간격이 이만큼으로 좁아지는 프레임에 딱 한 번.
+// 한 프레임 전 간격과 지금 간격을 견주어 잡으므로 벌림·주기를 바꿔도 놓치지 않는다
+function crushGap() { return SETTINGS.ballR * 2.5; }
 function doCrush() {
   const r = SETTINGS.ballR, gap = Math.max(0, pressHalfW() - PRESS.wall);
   const out = [];
@@ -556,11 +567,12 @@ function loop(now) {
       else pressT = nt % 1;
     }
     if (pressT < before) { crushedThisCycle = 0; cycleId++; }           // 새 주기 시작
-    if (before < 0.02 && pressT >= 0.02) SFX.servo();                   // 닫히기 시작
-    if (before < CRUSH_T && pressT >= CRUSH_T && !ended) doCrush();     // 무는 순간
-    if (before < 0.16 && pressT >= 0.16) { SFX.clank(); shake = Math.max(shake, 7); }
+    if (before < 0.02 && pressT >= 0.02) SFX.servo(PHASE.close * SETTINGS.cycleMs / 1000);   // 미는 동안 내내
+    const hwNow = pressHalfW();
+    if (!ended && lastHalf - PRESS.wall > crushGap() && hwNow - PRESS.wall <= crushGap()) doCrush();   // 무는 순간
+    if (before < PHASE.close && pressT >= PHASE.close) { SFX.clank(); shake = Math.max(shake, 7); }
 
-    const hw = pressHalfW(), wallV = Math.abs(hw - lastHalf) / Math.max(1e-4, frame); lastHalf = hw;
+    const wallV = Math.abs(hwNow - lastHalf) / Math.max(1e-4, frame); lastHalf = hwNow;
     while (acc >= FIXED) { step(FIXED, wallV); acc -= FIXED; }
     if (acc > 0.2) acc = 0;
 
@@ -626,7 +638,7 @@ function syncUI() {
 }
 openwIn.oninput = () => { SETTINGS.openW = +openwIn.value; PRESS.openHalf = SETTINGS.openW; syncUI(); reset(); };
 cycleIn.oninput = () => { SETTINGS.cycleMs = +cycleIn.value; syncUI(); };
-ballrIn.oninput = () => { SETTINGS.ballR = +ballrIn.value; syncUI(); reset(); };
+ballrIn.oninput = () => { SETTINGS.ballR = +ballrIn.value; spriteCache.length = 0; syncUI(); reset(); };   // 그림도 새 크기로 다시 굽는다
 goalIn.oninput  = () => { SETTINGS.goal = +goalIn.value; syncUI(); };
 syncUI();
 
