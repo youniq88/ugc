@@ -9,9 +9,11 @@
 - 배포는 파일을 통째로 올리지 않고, Vercel 빌드가 이 저장소의 `claude/progressive-merge-game-4ol028` 브랜치에서 `index.html` 을 받아 `public/` 에 놓는 방식입니다. 프로젝트 설정에 아래 두 줄이 들어 있으니, 새로 푸시한 내용을 반영하려면 같은 설정으로 다시 배포하기만 하면 됩니다.
 
 ```
-빌드 명령: mkdir -p public && curl -fsSL -o public/index.html https://raw.githubusercontent.com/youniq88/ugc/claude/progressive-merge-game-4ol028/merge-game/index.html && curl -fsSL -o public/press.html https://raw.githubusercontent.com/youniq88/ugc/claude/progressive-merge-game-4ol028/merge-game/press.html && test -s public/index.html
+빌드 명령: B=https://raw.githubusercontent.com/youniq88/ugc/claude/progressive-merge-game-4ol028/merge-game; mkdir -p public; for f in index press; do curl -fsSL -o public/$f.html $B/$f.html; done; test -s public/press.html
 출력 디렉터리: public
 ```
+
+빌드 명령은 256자를 넘을 수 없어서 주소를 변수로 빼 두었습니다.
 
 머지 게임과 규칙이 다른 프레스 모드는 `press.html` 로 따로 있습니다. 배포 주소 뒤에 `/press.html` 을 붙이면 열립니다.
 
