@@ -99,7 +99,7 @@ const params = new URLSearchParams(location.search);
 { const v = params.get("preset"); if (v) SETTINGS.preset = v; }
 
 /* ---------- 요소 그림: 머지 게임과 같은 presets.js 를 쓴다 ---------- */
-// 개수가 두 배로 늘 때마다 다음 단계 그림으로 넘어간다. 프리셋이 없으면 단색 공으로 그린다
+// 목표까지의 진행도를 따라 다음 단계 그림으로 넘어간다. 프리셋이 없으면 단색 공으로 그린다
 let presetName = (typeof PRESETS !== "undefined" && PRESETS[SETTINGS.preset]) ? SETTINGS.preset : null;
 let ITEMS = presetName ? PRESETS[presetName].items : [];
 const imgCache = {}, spriteCache = [];
@@ -179,7 +179,7 @@ const RAIL_H = 26;
 const PALETTE = ["#ff8a1e", "#2eff6a", "#3d7bff", "#ff2e78", "#ffe03d", "#22d7ff", "#b44dff", "#ff3b2e", "#8cff2e", "#ff6ad5"];
 
 let balls = [], particles = [], goo = [], confetti = [], crushing = [];
-let uid = 0, peak = 0;
+let uid = 0, peak = 0, stage = 0;   // stage: 지금 내보내는 요소 단계 (뒤로는 안 간다)
 let gt = 0, paused = true, ended = false, endedAt = 0, overSince = 0;   // overSince 는 record.js 호환용 (이 모드엔 게임 오버가 없다)
 let shake = 0, flash = 0, pressT = 0, cycleId = 0;
 let TIERS = [];                                                         // record.js 호환용 빈 값 (imgCache 는 위에 있다)
@@ -187,14 +187,20 @@ let ringCanvas = null, ringCanvasR = -1;
 
 function reset() {
   balls = []; particles = []; goo = []; confetti = []; crushing = [];
-  uid = 0; peak = 0; ended = false; endedAt = 0; overSince = 0;
+  uid = 0; peak = 0; stage = 0; ended = false; endedAt = 0; overSince = 0;
   shake = 0; flash = 0; pressT = 0; cycleId = 0;
   ARENA.R = baseArenaR(); ringCanvasR = -1;
   spawn(ARENA.cx, ARENA.cy + 6, (Math.random()-.5)*160, (Math.random()-.5)*160);   // 첫 공은 압착기 안에서 시작
 }
 function spawn(x, y, vx, vy, safeMs = 0) {
-  const g = Math.floor(Math.log2(uid + 1));                     // 개수가 두 배가 될 때마다 다음 색
-  balls.push({ id: uid++, x, y, vx, vy, r: SETTINGS.ballR, gen: g, color: itemColor(g), safe: gt + safeMs, pop: 0 });
+  balls.push({ id: uid++, x, y, vx, vy, r: SETTINGS.ballR, gen: stage, color: itemColor(stage), safe: gt + safeMs, pop: 0 });
+}
+// 지금 몇 단계짜리 요소를 내보낼지. 목표까지 얼마나 왔느냐로 정해서, 목표에 닿을 때 마지막 단계(우주라면 블랙홀)가 되게 한다.
+// 개수는 기하급수로 늘기 때문에 진행도를 그대로 쓰면 1단계에 한참 머물다 뒷단계가 몰린다. 0.45 제곱으로 펴 준다
+function stageNow() {
+  const last = (ITEMS.length || PALETTE.length) - 1;
+  const p = Math.pow(Math.min(1, Math.max(1, balls.length) / SETTINGS.goal), 0.45);
+  return Math.max(0, Math.min(last, Math.floor(p * (last + 1))));
 }
 
 /* ---------- 소리 ---------- */
@@ -659,6 +665,7 @@ function loop(now) {
     if (target > ARENA.R) ARENA.R += Math.min(target - ARENA.R, frame * 260);
 
     if (balls.length > peak) peak = balls.length;
+    if (!ended) stage = Math.max(stage, stageNow());                    // 단계는 목표까지의 진행도를 따라간다
     if (!ended && balls.length >= SETTINGS.goal) finale();
 
     for (const g of goo) { g.x += g.vx*frame; g.y += g.vy*frame; g.vx *= 0.9; g.vy *= 0.9; g.life -= frame*2.2; }
@@ -717,7 +724,7 @@ function syncUI() {
   ballrIn.value = SETTINGS.ballR;   ballrVal.textContent = SETTINGS.ballR;
   goalIn.value  = SETTINGS.goal;    goalVal.textContent  = SETTINGS.goal;
 }
-multIn.oninput    = () => { SETTINGS.mult = +multIn.value; syncUI(); reset(); };   // 색이 바뀌는 간격도 달라져서 처음부터
+multIn.oninput    = () => { SETTINGS.mult = +multIn.value; syncUI(); reset(); };   // 한 판 흐름이 통째로 달라져서 처음부터
 stretchIn.oninput = () => { SETTINGS.stretch = +stretchIn.value; syncUI(); };   // 바로 반영된다 (다시 시작할 필요 없음)
 openwIn.oninput = () => { SETTINGS.openW = +openwIn.value; PRESS.openHalf = SETTINGS.openW; syncUI(); reset(); };
 cycleIn.oninput = () => { SETTINGS.cycleMs = +cycleIn.value; syncUI(); };
