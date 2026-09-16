@@ -130,10 +130,30 @@ function itemSprite(i) {
   const c = document.createElement("canvas"); c.width = c.height = S;
   const g = c.getContext("2d");
   const im = t._imgKey && imgCache[t._imgKey];
-  if (im) {
+  if (im) {                                                     // 키트 PNG
     const d = r*2*(t.scale || 1.12);
     if (t.glow) { g.save(); g.shadowColor = t.glow; g.shadowBlur = r*0.55; g.drawImage(im, S/2-d/2, S/2-d/2, d, d); g.restore(); }
     g.drawImage(im, S/2-d/2, S/2-d/2, d, d);
+  } else if (t.emoji) {                                         // 이모지로 그리는 요소
+    g.font = `${Math.round(r*1.6)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.save(); g.shadowColor = t.glow || "#fff"; g.shadowBlur = r*0.6; g.fillText(t.emoji, S/2, S/2 + r*0.08); g.restore();
+    g.fillText(t.emoji, S/2, S/2 + r*0.08);
+  } else if (typeof SHAPES !== "undefined" && (t.shape || t.colors)) {
+    // 코드로 그리는 요소 (블랙홀·보석·행성 등). 머지 게임과 같은 SHAPES 를 쓴다.
+    // 머지 게임은 base 층과 light 층을 따로 두지만 여기 공은 돌지 않으므로 한 장에 겹쳐 굽는다
+    g.save(); g.translate(S/2, S/2);
+    if (t.shape !== "blackhole") {                              // 바깥으로 퍼지는 빛 (블랙홀은 빛을 내지 않는다)
+      const soft = t.shape === "star" || t.shape === "sun";
+      g.save(); g.shadowColor = t.glow || "#fff"; g.shadowBlur = pad*1.6; g.fillStyle = t.glow || "#fff";
+      g.beginPath(); g.arc(0, 0, r*(soft ? 0.72 : 0.92), 0, Math.PI*2);
+      g.globalAlpha = soft ? 0.5 : 0.85; g.fill(); g.shadowBlur = pad*0.7; g.fill(); g.restore();
+    }
+    const draw = SHAPES[t.shape] || SHAPES.sphere;
+    LIGHT_PASS = false; draw(g, r, t);
+    LIGHT_PASS = true;  draw(g, r, t);
+    LIGHT_PASS = false;
+    g.restore();
   } else {
     g.fillStyle = t.glow || "#fff"; g.beginPath(); g.arc(S/2, S/2, r, 0, Math.PI*2); g.fill();
   }
