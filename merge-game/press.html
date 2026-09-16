@@ -38,6 +38,7 @@
   <button id="btnReset">다시 시작</button>
   <button id="btnRec">● 녹화</button>
   <label title="누르는 주기 (ms): 한 번 눌렀다 열리기까지 걸리는 시간">주기 <input id="cycle" type="range" min="400" max="2000" step="20"><span id="cycleVal"></span></label>
+  <label title="압착기가 벌어지는 너비의 절반 (px). 넓을수록 한 번에 많이 뭅니다">벌림 <input id="openw" type="range" min="60" max="280" step="5"><span id="openwVal"></span></label>
   <label title="공 크기 (px)">공 <input id="ballr" type="range" min="10" max="40" step="1"><span id="ballrVal"></span></label>
   <label title="몇 개가 되면 끝낼지">끝 <input id="goal" type="range" min="200" max="2500" step="50"><span id="goalVal"></span></label>
   <button id="btnHide">UI 숨기기</button>
@@ -50,7 +51,7 @@
   <button id="btnClose">닫기</button>
 </div>
 <div id="audioHint">🔈 화면을 한 번 탭하면 소리가 켜집니다</div>
-<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화 · Enter: 다시 시작 · URL ?cycle=1000 &ball=19 &goal=1400 &ui=0</div>
+<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화 · Enter: 다시 시작 · URL ?preset=fruits &open=150 &cycle=600 &ball=20 &goal=460 &ui=0</div>
 
 <script src="presets.js"></script>
 <script>
@@ -69,6 +70,8 @@ const SETTINGS = {
                          // 구석에 끼지 않는다 (공 지름의 두 배 이상)
   goal: 460,             // 이만큼 되면 피날레
   pack: 0.80,            // 원 넓이 대비 공이 차지할 비율. 빽빽할수록 압착기 입이 늘 꽉 차서 빨리 불어난다
+  openW: 150,            // 압착기가 벌어지는 너비의 절반 (px, 60~280). 보이는 크기를 정한다.
+                         // 넓혀도 걸리는 시간은 거의 그대로다 (80·150·240 에서 37.4 / 36.7 / 37.9초)
   cycleMs: 600,          // 한 번 눌렀다 열리기까지
   restitution: 0.86,     // 공끼리 튀는 정도
   wallBounce: 0.88,      // 원 벽에 튀는 정도
@@ -86,6 +89,7 @@ const params = new URLSearchParams(location.search);
 { const v = parseFloat(params.get("cycle")); if (!isNaN(v)) SETTINGS.cycleMs = Math.min(2000, Math.max(400, v)); }
 { const v = parseFloat(params.get("ball"));  if (!isNaN(v)) SETTINGS.ballR   = Math.min(40, Math.max(10, v)); }
 { const v = parseFloat(params.get("goal"));  if (!isNaN(v)) SETTINGS.goal    = Math.min(2500, Math.max(50, v)); }
+{ const v = parseFloat(params.get("open"));  if (!isNaN(v)) SETTINGS.openW   = Math.min(280, Math.max(60, v)); }
 { const v = params.get("preset"); if (v) SETTINGS.preset = v; }
 
 /* ---------- 요소 그림: 머지 게임과 같은 presets.js 를 쓴다 ---------- */
@@ -138,8 +142,11 @@ function itemSprite(i) {
 function itemColor(g) { return ITEMS.length ? (ITEMS[g % ITEMS.length].glow || PALETTE[g % PALETTE.length]) : PALETTE[g % PALETTE.length]; }
 
 // 압착기 생김새: 네모 틀. 양옆 벽이 가운데로 미끄러져 들어오고, 위아래 막대는 가운데만 막아 네 귀퉁이가 뚫려 있다
-const PRESS = { cy: H/2, halfH: 142, wall: 22, openHalf: 150, closeHalf: 22, brkFrac: 0.30, plate: 8 };
+const PRESS = { cy: H/2, halfH: 142, wall: 22, openHalf: SETTINGS.openW, closeHalf: 22, brkFrac: 0.30, plate: 8 };
 const ARENA = { cx: W/2, cy: H/2, R: SETTINGS.startR };
+// 틀 모서리와 원 벽 사이에 공이 넉넉히 지나갈 틈(공 지름의 두 배)이 남는 최소 반지름
+function minArenaR() { return Math.hypot(PRESS.openHalf, PRESS.halfH) + SETTINGS.ballR*2 + 20; }
+function baseArenaR() { return Math.max(SETTINGS.startR, minArenaR()); }
 const RAIL_H = 26;
 
 // 세대마다 색이 바뀐다. 눌릴 때마다 다음 색으로 넘어가서 화면 색이 통째로 갈아엎어진다
@@ -156,7 +163,7 @@ function reset() {
   balls = []; particles = []; goo = []; confetti = [];
   uid = 0; peak = 0; ended = false; endedAt = 0; overSince = 0;
   shake = 0; flash = 0; pressT = 0; cycleId = 0; crushedThisCycle = 0;
-  ARENA.R = SETTINGS.startR; ringCanvasR = -1;
+  ARENA.R = baseArenaR(); ringCanvasR = -1;
   spawn(ARENA.cx, ARENA.cy + 6, (Math.random()-.5)*160, (Math.random()-.5)*160);   // 첫 공은 압착기 안에서 시작
 }
 function spawn(x, y, vx, vy, safeMs = 0) {
@@ -559,7 +566,7 @@ function loop(now) {
 
     // 공이 늘어난 만큼 원이 커진다
     const need = Math.sqrt(balls.length * SETTINGS.ballR*SETTINGS.ballR / SETTINGS.pack);
-    const target = Math.max(SETTINGS.startR, need);
+    const target = Math.max(baseArenaR(), need);
     if (target > ARENA.R) ARENA.R += Math.min(target - ARENA.R, frame * 260);
 
     if (balls.length > peak) peak = balls.length;
@@ -607,14 +614,17 @@ function setPaused(p) { paused = p; btnPause.textContent = p ? "▶ 계속" : "�
 btnPause.onclick = () => setPaused(!paused);
 document.getElementById("btnReset").onclick = () => { reset(); setPaused(false); };
 
+const openwIn = document.getElementById("openw"), openwVal = document.getElementById("openwVal");
 const cycleIn = document.getElementById("cycle"), cycleVal = document.getElementById("cycleVal");
 const ballrIn = document.getElementById("ballr"), ballrVal = document.getElementById("ballrVal");
 const goalIn  = document.getElementById("goal"),  goalVal  = document.getElementById("goalVal");
 function syncUI() {
+  openwIn.value = SETTINGS.openW;   openwVal.textContent = SETTINGS.openW;
   cycleIn.value = SETTINGS.cycleMs; cycleVal.textContent = SETTINGS.cycleMs + "ms";
   ballrIn.value = SETTINGS.ballR;   ballrVal.textContent = SETTINGS.ballR;
   goalIn.value  = SETTINGS.goal;    goalVal.textContent  = SETTINGS.goal;
 }
+openwIn.oninput = () => { SETTINGS.openW = +openwIn.value; PRESS.openHalf = SETTINGS.openW; syncUI(); reset(); };
 cycleIn.oninput = () => { SETTINGS.cycleMs = +cycleIn.value; syncUI(); };
 ballrIn.oninput = () => { SETTINGS.ballR = +ballrIn.value; syncUI(); reset(); };
 goalIn.oninput  = () => { SETTINGS.goal = +goalIn.value; syncUI(); };
