@@ -33,6 +33,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="ui">
+  <select id="modeSel" title="게임 모드"><option value="merge">합치기 게임</option><option value="press">프레스 게임</option></select>
   <select id="presetSel"></select>
   <button id="btnPause">⏸ 일시정지</button>
   <button id="btnReset">다시 시작</button>
@@ -53,7 +54,7 @@
   <button id="btnClose">닫기</button>
 </div>
 <div id="audioHint">🔈 화면을 한 번 탭하면 소리가 켜집니다</div>
-<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화 · Enter: 다시 시작 · 화면을 탭하면 숨긴 UI 가 다시 나옵니다 (UI 는 녹화에 안 담깁니다) · URL ?preset=fruits &open=150 &mult=2 &stretch=1.85 &cycle=700 &ball=20 &goal=460 &ui=0</div>
+<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화 · Enter: 다시 시작 · 화면을 탭하면 숨긴 UI 가 다시 나옵니다 (UI 는 녹화에 안 담깁니다) · 모드: UI 왼쪽 위에서 합치기 게임으로 바꿀 수 있습니다 · URL ?preset=fruits &open=150 &mult=2 &stretch=1.85 &cycle=700 &ball=20 &goal=460 &ui=0</div>
 
 <script src="presets.js"></script>
 <script>
@@ -693,6 +694,18 @@ function setUI(show) { ui.classList.toggle("hidden", !show); hint.classList.togg
 function toggleUI() { setUI(ui.classList.contains("hidden")); }
 document.getElementById("btnHide").onclick = toggleUI;
 if (params.get("ui") === "0") { setUI(false); document.getElementById("audioHint").classList.add("hidden"); }
+
+/* ---------- 모드 바꾸기: 머지 게임 <-> 프레스 (파일은 둘이지만 UI 에서 한 번에 넘어간다) ---------- */
+const modeSel = document.getElementById("modeSel");
+modeSel.value = "press";
+modeSel.onchange = () => {
+  if (modeSel.value === "press") return;
+  const q = new URLSearchParams();
+  const p = (presetName || "none"); if (p) q.set("preset", p);
+  if (params.get("ui") === "0") q.set("ui", "0");
+  const s = q.toString();
+  location.href = (modeSel.value === "press" ? "press.html" : "index.html") + (s ? "?" + s : "");
+};
 
 const sel = document.getElementById("presetSel");
 if (typeof PRESETS !== "undefined") {
