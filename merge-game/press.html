@@ -172,17 +172,17 @@ const RAIL_H = 26;
 // 세대마다 색이 바뀐다. 눌릴 때마다 다음 색으로 넘어가서 화면 색이 통째로 갈아엎어진다
 const PALETTE = ["#ff8a1e", "#2eff6a", "#3d7bff", "#ff2e78", "#ffe03d", "#22d7ff", "#b44dff", "#ff3b2e", "#8cff2e", "#ff6ad5"];
 
-let balls = [], particles = [], goo = [], confetti = [];
+let balls = [], particles = [], goo = [], confetti = [], crushing = [];
 let uid = 0, peak = 0;
 let gt = 0, paused = true, ended = false, endedAt = 0, overSince = 0;   // overSince 는 record.js 호환용 (이 모드엔 게임 오버가 없다)
-let shake = 0, flash = 0, pressT = 0, cycleId = 0, crushedThisCycle = 0;
+let shake = 0, flash = 0, pressT = 0, cycleId = 0;
 let TIERS = [];                                                         // record.js 호환용 빈 값 (imgCache 는 위에 있다)
 let ringCanvas = null, ringCanvasR = -1;
 
 function reset() {
-  balls = []; particles = []; goo = []; confetti = [];
+  balls = []; particles = []; goo = []; confetti = []; crushing = [];
   uid = 0; peak = 0; ended = false; endedAt = 0; overSince = 0;
-  shake = 0; flash = 0; pressT = 0; cycleId = 0; crushedThisCycle = 0;
+  shake = 0; flash = 0; pressT = 0; cycleId = 0;
   ARENA.R = baseArenaR(); ringCanvasR = -1;
   spawn(ARENA.cx, ARENA.cy + 6, (Math.random()-.5)*160, (Math.random()-.5)*160);   // 첫 공은 압착기 안에서 시작
 }
@@ -237,6 +237,14 @@ const SFX = {
     noise({ type: "highpass", f0: 2600, f1: 1100, q: 0.8, a: 0.001, d: 0.09, vol: 0.20 });
     noise({ type: "lowpass",  f0: 420,  f1: 120,  q: 0.7, a: 0.001, d: 0.14, vol: 0.24 });
     tone({ type: "triangle", f0: 168, f1: 74, a: 0.001, d: 0.17, vol: 0.13 });
+  },
+  strain(n) {                                            // 압착판에 눌려 버티는 동안 나는 삐걱 소리
+    if (!this.ready()) return;
+    const k = Math.min(1, Math.log2(1 + n) / 6);
+    tone({ type: "sawtooth", f0: 62, f1: 128 + k*90, a: 0.06, d: 0.42, vol: 0.05 + k*0.05 });
+    noise({ type: "bandpass", f0: 220, f1: 900 + k*700, q: 6, a: 0.05, d: 0.40, vol: 0.05 + k*0.05 });
+    for (let i = 0; i < 4; i++)                          // 삐걱삐걱 끊기는 결
+      noise({ at: 0.08 + i*0.085, type: "bandpass", f0: 700 + i*420, q: 9, a: 0.004, d: 0.05, vol: 0.05 });
   },
   pop(n) {                                               // 터지는 소리. 한꺼번에 여러 개가 터질수록 두껍게
     if (!this.ready()) return;
@@ -325,6 +333,11 @@ function step(dt, wallV) {
   const gap = hw - PRESS.wall;                                  // 양쪽 벽 안쪽면 사이의 반폭
 
   for (const b of balls) {
+    if (b.crush) {                                              // 압착판에 붙잡혀 버티는 중: 틈이 좁아지는 만큼 가운데로 모인다
+      const k = 1 - Math.max(0, Math.min(1, (gap - burstGap()) / Math.max(1, touchGap() - burstGap())));
+      b.x = ARENA.cx + (b.crush.x - ARENA.cx) * (1 - k); b.y = b.crush.y; b.vx = b.vy = 0;
+      continue;
+    }
     b.x += b.vx*dt; b.y += b.vy*dt;
     b.vx *= 0.9990; b.vy *= 0.9990;                             // 아주 약한 감쇠. 안 그러면 에너지가 계속 늘어난다
     const sp = Math.hypot(b.vx, b.vy);                          // 어딘가에 끼어 멈춰 버리면 아무 데로나 한 번 차 준다
@@ -344,6 +357,7 @@ function step(dt, wallV) {
 
   // 원 벽
   for (const b of balls) {
+    if (b.crush) continue;
     const dx = b.x - ARENA.cx, dy = b.y - ARENA.cy, d = Math.hypot(dx, dy), lim = R - r;
     if (d > lim) {
       const nx = dx/(d||1), ny = dy/(d||1);
@@ -355,6 +369,7 @@ function step(dt, wallV) {
 
   // 압착기 벽 (양옆 벽은 움직이므로 벽 속도를 얹어 준다)
   for (const b of balls) {
+    if (b.crush) continue;                                      // 붙잡힌 공은 벽이 더 밀지 않는다
     for (const q of rects) {
       const cx = Math.max(q.x0, Math.min(b.x, q.x1)), cy = Math.max(q.y0, Math.min(b.y, q.y1));
       let dx = b.x - cx, dy = b.y - cy, d2 = dx*dx + dy*dy;
@@ -398,8 +413,10 @@ function step(dt, wallV) {
         if (o.id <= b.id) continue;
         const dx = o.x - b.x, dy = o.y - b.y, rs = r*2, d2 = dx*dx + dy*dy;
         if (d2 >= rs*rs || d2 < 1e-9) continue;
-        const d = Math.sqrt(d2), nx = dx/d, ny = dy/d, pen = (rs - d) * 0.5;
-        b.x -= nx*pen; b.y -= ny*pen; o.x += nx*pen; o.y += ny*pen;
+        const d = Math.sqrt(d2), nx = dx/d, ny = dy/d;
+        const bf = b.crush ? 0 : o.crush ? 1 : 0.5, of = o.crush ? 0 : b.crush ? 1 : 0.5;
+        const pen = rs - d;
+        b.x -= nx*pen*bf; b.y -= ny*pen*bf; o.x += nx*pen*of; o.y += ny*pen*of;
         const vn = (o.vx - b.vx)*nx + (o.vy - b.vy)*ny;
         if (vn < 0) {
           const j = -(1+e) * vn * 0.5;
@@ -412,25 +429,43 @@ function step(dt, wallV) {
 
 }
 
-// 무는 순간: 벽 사이 간격이 이만큼으로 좁아지는 프레임에 딱 한 번.
-// 한 프레임 전 간격과 지금 간격을 견주어 잡으므로 벌림·주기를 바꿔도 놓치지 않는다
-function crushGap() { return SETTINGS.ballR * 2.5; }
-function doCrush() {
+/* ---------- 무는 과정: 닿는다 → 버틴다 → 못 버티고 터진다 ---------- */
+// 압착판이 공에 처음 닿는 간격과, 더 못 버티고 터지는 간격
+function touchGap() { return SETTINGS.ballR * 1.2; }
+function burstGap() { return SETTINGS.ballR * 0.45; }
+
+// 압착판이 닿는 순간: 입 안의 공을 그 자리에 붙잡아 둔다. 이때부터 눌린 만큼 납작해진다
+function beginCrush() {
   const r = SETTINGS.ballR, gap = Math.max(0, pressHalfW() - PRESS.wall);
-  const out = [];
   for (const b of balls) {
-    if (gt < b.safe) continue;                                  // 막 태어난 공은 다음 번에 문다
+    if (b.crush || gt < b.safe) continue;                       // 막 태어난 공은 다음 번에 문다
     if (Math.abs(b.y - PRESS.cy) > PRESS.halfH - 3) continue;
     if (Math.abs(b.x - ARENA.cx) > gap + r) continue;
-    out.push(b);
+    b.crush = { x: b.x, y: b.y }; b.vx = b.vy = 0;
+    crushing.push(b);
   }
+  if (crushing.length) SFX.strain(crushing.length);
+}
+function releaseCrush() {                                       // 터지기 전에 압착기가 벌어지면 놓아 준다
+  for (const b of crushing) b.crush = null;
+  crushing.length = 0;
+}
+// 더 못 버티는 순간: 붙잡아 둔 공이 한꺼번에 터진다
+function doCrush() {
+  const out = crushing.filter(b => balls.includes(b));
+  crushing.length = 0;
   if (!out.length) return;
   const set = new Set(out);
   balls = balls.filter(b => !set.has(b));
   for (const b of out) burst(b);
   SFX.pop(out.length);
-  shake = Math.max(shake, 6 + Math.min(20, out.length*0.5));
-  flash = Math.max(flash, Math.min(0.28, 0.04 + out.length*0.004));
+  shake = Math.max(shake, 8 + Math.min(22, out.length*0.6));
+  flash = Math.max(flash, Math.min(0.32, 0.06 + out.length*0.005));
+}
+// 지금 눌린 정도 (1 = 그대로, 0.3 = 납작). 붙잡힌 공을 그릴 때 쓴다
+function squashNow() {
+  const gap = Math.max(0, pressHalfW() - PRESS.wall);
+  return Math.max(0.3, Math.min(1, gap / SETTINGS.ballR));
 }
 
 // 한 개가 터지면서 두 개가 된다. 양옆으로 즙처럼 뿜어져 나간다
@@ -529,20 +564,23 @@ function render() {
   const R = ARENA.R;
   if (R < 1240) { const sp = ringSprite(R); ctx.drawImage(sp, ARENA.cx - sp.width/2, ARENA.cy - sp.height/2); }
 
-  if (ITEMS.length) {                                           // 프리셋 그림으로 그리기
-    for (const b of balls) {
+  const sqNow = squashNow(), shiver = (1 - sqNow) * 3.2;         // 눌릴수록 더 부들거린다
+  const drawBall = (b, held) => {
+    const sx = held ? sqNow : 1, sy = held ? Math.min(1.5, 1/Math.sqrt(sx)) : 1;
+    const jx = held ? (Math.random()-.5)*shiver : 0, jy = held ? (Math.random()-.5)*shiver : 0;
+    if (ITEMS.length) {                                         // 프리셋 그림으로 그리기
       const sp = itemSprite(b.gen), k = 1 + b.pop*0.22, w = sp.width*k;
-      ctx.drawImage(sp, b.x - w/2, b.y - w/2, w, w);
-    }
-  } else {
-    for (const b of balls) {                                    // 단색 공
+      ctx.drawImage(sp, b.x + jx - w*sx/2, b.y + jy - w*sy/2, w*sx, w*sy);
+    } else {                                                    // 단색 공
       ctx.fillStyle = b.color;
       const rr = b.r * (1 + b.pop*0.22);
-      ctx.beginPath(); ctx.arc(b.x, b.y, rr, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(b.x + jx, b.y + jy, rr*sx, rr*sy, 0, 0, Math.PI*2); ctx.fill();
     }
-  }
+  };
+  for (const b of balls) if (!b.crush) drawBall(b, false);
   drawRail();
   drawPress(pressHalfW());
+  for (const b of balls) if (b.crush) drawBall(b, true);        // 눌리는 중인 공은 압착판 위에 그려야 보인다
 
   for (const g of goo) {                                        // 눌려서 옆으로 뿜어져 나온 즙 (틀 위에 얹는다)
     ctx.globalAlpha = Math.min(1, g.life) * 0.92; ctx.fillStyle = g.color;
@@ -580,16 +618,22 @@ function loop(now) {
   const frame = Math.min(0.05, (now - last)/1000); last = now;
   if (!paused) {
     gt += frame * 1000; acc += frame;
-    const before = pressT;
+    const before = pressT, gapBefore = lastHalf - PRESS.wall;
     if (!ended) {
-      const nt = pressT + frame*1000/SETTINGS.cycleMs;
+      // 공이 버티는 동안에는 압착기가 느려진다. 그래야 납작해지는 게 눈에 보인다
+      const squeezing = crushing.length > 0 && pressT < PHASE.close;
+      const nt = pressT + frame*1000/SETTINGS.cycleMs * (squeezing ? 0.22 : 1);
       if (nt >= 1 && mouthCount() === 0) pressT = 0.96;                 // 물 게 없으면 벌린 채 기다린다
       else pressT = nt % 1;
     }
-    if (pressT < before) { crushedThisCycle = 0; cycleId++; }           // 새 주기 시작
+    if (pressT < before) cycleId++;                                     // 새 주기 시작
     if (before < 0.02 && pressT >= 0.02) SFX.servo(PHASE.close * SETTINGS.cycleMs / 1000);   // 미는 동안 내내
-    const hwNow = pressHalfW();
-    if (!ended && lastHalf - PRESS.wall > crushGap() && hwNow - PRESS.wall <= crushGap()) doCrush();   // 무는 순간
+    const hwNow = pressHalfW(), gapNow = hwNow - PRESS.wall;
+    if (!ended) {
+      if (gapBefore > touchGap() && gapNow <= touchGap()) beginCrush();  // 압착판이 닿았다
+      if (gapBefore > burstGap() && gapNow <= burstGap()) doCrush();     // 더 못 버틴다
+      if (crushing.length && gapNow > touchGap() * 1.3) releaseCrush();  // 안 터지고 벌어졌으면 놓아 준다
+    }
     if (before < PHASE.close && pressT >= PHASE.close) { SFX.clank(); shake = Math.max(shake, 7); }
 
     const wallV = Math.abs(hwNow - lastHalf) / Math.max(1e-4, frame); lastHalf = hwNow;
