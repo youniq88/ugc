@@ -33,6 +33,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="ui">
+  <select id="presetSel"></select>
   <button id="btnPause">⏸ 일시정지</button>
   <button id="btnReset">다시 시작</button>
   <button id="btnRec">● 녹화</button>
@@ -51,6 +52,7 @@
 <div id="audioHint">🔈 화면을 한 번 탭하면 소리가 켜집니다</div>
 <div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화 · Enter: 다시 시작 · URL ?cycle=1000 &ball=19 &goal=1400 &ui=0</div>
 
+<script src="presets.js"></script>
 <script>
 /* ============================================================
    프레스 모드: 가운데 압착기가 공을 누르면 터지면서 두 개가 된다.
@@ -61,6 +63,7 @@
 
 /* ▼▼▼ 설정 ▼▼▼ */
 const SETTINGS = {
+  preset: "fruits",      // 공에 쓸 그림 프리셋 (presets.js 의 이름). "none" 이면 단색 공
   ballR: 20,             // 공 반지름 (px). 작을수록 압착기 입에 한 번에 더 많이 들어간다
   startR: 330,           // 처음 원 반지름. 틀 모서리와 원 사이로 공이 넉넉히 돌아다닐 만큼은 띄워야
                          // 구석에 끼지 않는다 (공 지름의 두 배 이상)
@@ -83,6 +86,56 @@ const params = new URLSearchParams(location.search);
 { const v = parseFloat(params.get("cycle")); if (!isNaN(v)) SETTINGS.cycleMs = Math.min(2000, Math.max(400, v)); }
 { const v = parseFloat(params.get("ball"));  if (!isNaN(v)) SETTINGS.ballR   = Math.min(40, Math.max(10, v)); }
 { const v = parseFloat(params.get("goal"));  if (!isNaN(v)) SETTINGS.goal    = Math.min(2500, Math.max(50, v)); }
+{ const v = params.get("preset"); if (v) SETTINGS.preset = v; }
+
+/* ---------- 요소 그림: 머지 게임과 같은 presets.js 를 쓴다 ---------- */
+// 개수가 두 배로 늘 때마다 다음 단계 그림으로 넘어간다. 프리셋이 없으면 단색 공으로 그린다
+let presetName = (typeof PRESETS !== "undefined" && PRESETS[SETTINGS.preset]) ? SETTINGS.preset : null;
+let ITEMS = presetName ? PRESETS[presetName].items : [];
+const imgCache = {}, spriteCache = [];
+function kitUrls(name) {
+  const kit = (typeof KITS !== "undefined" && KITS[PRESETS[presetName].kit]) || [];
+  return kit.map(b => b + name.split("/").map(encodeURIComponent).join("/"));
+}
+function imageCandidates(t) { return t.image ? [t.image] : t.img ? kitUrls(t.img) : []; }
+function loadImages() {
+  const jobs = [];
+  for (const t of ITEMS) {
+    const cands = imageCandidates(t); if (!cands.length) continue;
+    const key = cands[0]; t._imgKey = key;
+    if (imgCache[key] !== undefined) continue;
+    jobs.push(new Promise(res => {
+      let i = 0;
+      const tryNext = () => {
+        if (i >= cands.length) { imgCache[key] = null; res(); return; }
+        const im = new Image(); im.crossOrigin = "anonymous";
+        im.onload = () => { imgCache[key] = im; res(); };
+        im.onerror = () => { i++; tryNext(); };
+        im.src = cands[i];
+      };
+      tryNext();
+    }));
+  }
+  return Promise.race([Promise.all(jobs), new Promise(r => setTimeout(r, 6000))])
+    .then(() => { spriteCache.length = 0; for (let i = 0; i < ITEMS.length; i++) itemSprite(i); });   // 미리 구워 둔다
+}
+// 공 하나 크기로 미리 그려 둔 그림. 수백 개를 매 프레임 그려야 해서 그때그때 만들면 안 된다
+function itemSprite(i) {
+  if (spriteCache[i]) return spriteCache[i];
+  const t = ITEMS[i % ITEMS.length], r = SETTINGS.ballR, pad = Math.ceil(r*0.5), S = Math.ceil(r*2 + pad*2);
+  const c = document.createElement("canvas"); c.width = c.height = S;
+  const g = c.getContext("2d");
+  const im = t._imgKey && imgCache[t._imgKey];
+  if (im) {
+    const d = r*2*(t.scale || 1.12);
+    if (t.glow) { g.save(); g.shadowColor = t.glow; g.shadowBlur = r*0.55; g.drawImage(im, S/2-d/2, S/2-d/2, d, d); g.restore(); }
+    g.drawImage(im, S/2-d/2, S/2-d/2, d, d);
+  } else {
+    g.fillStyle = t.glow || "#fff"; g.beginPath(); g.arc(S/2, S/2, r, 0, Math.PI*2); g.fill();
+  }
+  return spriteCache[i] = c;
+}
+function itemColor(g) { return ITEMS.length ? (ITEMS[g % ITEMS.length].glow || PALETTE[g % PALETTE.length]) : PALETTE[g % PALETTE.length]; }
 
 // 압착기 생김새: 네모 틀. 양옆 벽이 가운데로 미끄러져 들어오고, 위아래 막대는 가운데만 막아 네 귀퉁이가 뚫려 있다
 const PRESS = { cy: H/2, halfH: 142, wall: 22, openHalf: 150, closeHalf: 22, brkFrac: 0.30, plate: 8 };
@@ -96,7 +149,7 @@ let balls = [], particles = [], goo = [], confetti = [];
 let uid = 0, peak = 0;
 let gt = 0, paused = true, ended = false, endedAt = 0, overSince = 0;   // overSince 는 record.js 호환용 (이 모드엔 게임 오버가 없다)
 let shake = 0, flash = 0, pressT = 0, cycleId = 0, crushedThisCycle = 0;
-let TIERS = [], imgCache = {};                                          // record.js 호환용 빈 값
+let TIERS = [];                                                         // record.js 호환용 빈 값 (imgCache 는 위에 있다)
 let ringCanvas = null, ringCanvasR = -1;
 
 function reset() {
@@ -108,7 +161,7 @@ function reset() {
 }
 function spawn(x, y, vx, vy, safeMs = 0) {
   const g = Math.floor(Math.log2(uid + 1));                     // 개수가 두 배가 될 때마다 다음 색
-  balls.push({ id: uid++, x, y, vx, vy, r: SETTINGS.ballR, gen: g, color: PALETTE[g % PALETTE.length], safe: gt + safeMs, pop: 0 });
+  balls.push({ id: uid++, x, y, vx, vy, r: SETTINGS.ballR, gen: g, color: itemColor(g), safe: gt + safeMs, pop: 0 });
 }
 
 /* ---------- 소리 ---------- */
@@ -344,22 +397,22 @@ function doCrush() {
 
 // 한 개가 터지면서 두 개가 된다. 양옆으로 즙처럼 뿜어져 나간다
 function burst(b) {
-  const r = SETTINGS.ballR, gapNow = Math.max(r*1.1, pressHalfW() - PRESS.wall);
-  for (let i = 0; i < 2; i++) {                                 // 눌린 자리에서 위아래로 하나씩 뿜어져 나간다
-    const sy = i ? 1 : -1, sp = 190 + Math.random()*260;
-    spawn(ARENA.cx + (Math.random()-.5)*(gapNow - r)*1.6, b.y + sy*r*1.1,
-          (Math.random()-.5)*220, sy*sp, 380);
+  const r = SETTINGS.ballR, hw = pressHalfW();
+  for (let i = 0; i < 2; i++) {                                 // 눌린 자리에서 압착판 뒤쪽, 즉 양옆으로 하나씩 튀어 나간다
+    const dir = i ? 1 : -1, sp = 520 + Math.random()*420, a = (Math.random()-.5)*0.9;
+    spawn(ARENA.cx + dir*(hw + r*1.15), b.y + (Math.random()-.5)*r*1.6,
+          dir*Math.cos(a)*sp, Math.sin(a)*sp, 380);
     balls[balls.length-1].pop = 1;
   }
-  for (let i = 0; i < 4; i++) {                                 // 양옆으로 뿜어져 나오는 즙 덩어리
+  for (let i = 0; i < 6; i++) {                                 // 압착판 뒤쪽 양옆으로 뿜어져 나오는 즙 덩어리
     const dir = i % 2 ? 1 : -1;
-    goo.push({ x: ARENA.cx + dir*(pressHalfW() + 4), y: b.y + (Math.random()-.5)*PRESS.halfH*1.2,
-               vx: dir*(300 + Math.random()*460), vy: (Math.random()-.5)*380,
-               r: 22 + Math.random()*30, life: 1, color: b.color });
+    goo.push({ x: ARENA.cx + dir*(hw + 4), y: b.y + (Math.random()-.5)*PRESS.halfH*1.2,
+               vx: dir*(420 + Math.random()*560), vy: (Math.random()-.5)*300,
+               r: 20 + Math.random()*32, life: 1, color: b.color });
   }
-  for (let i = 0; i < 7; i++) {                                 // 잘게 튀는 조각
-    const a = Math.random()*Math.PI*2, sp = 240 + Math.random()*700;
-    particles.push({ x: b.x, y: b.y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 1,
+  for (let i = 0; i < 9; i++) {                                 // 잘게 튀는 조각도 뒤쪽으로 치우친다
+    const dir = i % 2 ? 1 : -1, a = (Math.random()-.5)*1.5, sp = 320 + Math.random()*880;
+    particles.push({ x: ARENA.cx + dir*hw, y: b.y, vx: dir*Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 1,
                      size: 3 + Math.random()*6, color: b.color, spin: Math.random()*Math.PI, spinV: (Math.random()-.5)*22 });
   }
 }
@@ -438,10 +491,17 @@ function render() {
   const R = ARENA.R;
   if (R < 1240) { const sp = ringSprite(R); ctx.drawImage(sp, ARENA.cx - sp.width/2, ARENA.cy - sp.height/2); }
 
-  for (const b of balls) {                                      // 공
-    ctx.fillStyle = b.color;
-    const rr = b.r * (1 + b.pop*0.22);
-    ctx.beginPath(); ctx.arc(b.x, b.y, rr, 0, Math.PI*2); ctx.fill();
+  if (ITEMS.length) {                                           // 프리셋 그림으로 그리기
+    for (const b of balls) {
+      const sp = itemSprite(b.gen), k = 1 + b.pop*0.22, w = sp.width*k;
+      ctx.drawImage(sp, b.x - w/2, b.y - w/2, w, w);
+    }
+  } else {
+    for (const b of balls) {                                    // 단색 공
+      ctx.fillStyle = b.color;
+      const rr = b.r * (1 + b.pop*0.22);
+      ctx.beginPath(); ctx.arc(b.x, b.y, rr, 0, Math.PI*2); ctx.fill();
+    }
   }
   drawRail();
   drawPress(pressHalfW());
@@ -531,6 +591,17 @@ function toggleUI() { setUI(ui.classList.contains("hidden")); }
 document.getElementById("btnHide").onclick = toggleUI;
 if (params.get("ui") === "0") { setUI(false); document.getElementById("audioHint").classList.add("hidden"); }
 
+const sel = document.getElementById("presetSel");
+if (typeof PRESETS !== "undefined") {
+  sel.innerHTML = '<option value="none">단색 공</option>' + Object.keys(PRESETS).map(k => `<option value="${k}">${k}</option>`).join("");
+  sel.value = presetName || "none";
+  sel.onchange = () => {                                        // 프리셋을 바꾸면 그림을 새로 받고 처음부터
+    presetName = PRESETS[sel.value] ? sel.value : null;
+    ITEMS = presetName ? PRESETS[presetName].items : [];
+    spriteCache.length = 0;
+    setPaused(true); loadImages().then(() => { reset(); setPaused(false); });
+  };
+}
 const btnPause = document.getElementById("btnPause");
 function setPaused(p) { paused = p; btnPause.textContent = p ? "▶ 계속" : "⏸ 일시정지"; if (!p) last = performance.now(); }
 btnPause.onclick = () => setPaused(!paused);
@@ -604,7 +675,8 @@ addEventListener("keydown", e => {
 });
 addEventListener("pointerdown", () => initAudio(), { once: false });
 
-reset(); setPaused(false); requestAnimationFrame(loop);
+setPaused(true); requestAnimationFrame(loop);
+loadImages().then(() => { reset(); setPaused(false); });
 </script>
 </body>
 </html>

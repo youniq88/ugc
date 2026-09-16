@@ -9,13 +9,15 @@
 - 배포는 파일을 통째로 올리지 않고, Vercel 빌드가 이 저장소의 `claude/progressive-merge-game-4ol028` 브랜치에서 `index.html` 을 받아 `public/` 에 놓는 방식입니다. 프로젝트 설정에 아래 두 줄이 들어 있으니, 새로 푸시한 내용을 반영하려면 같은 설정으로 다시 배포하기만 하면 됩니다.
 
 ```
-빌드 명령: B=https://raw.githubusercontent.com/youniq88/ugc/claude/progressive-merge-game-4ol028/merge-game; mkdir -p public; for f in index press; do curl -fsSL -o public/$f.html $B/$f.html; done; test -s public/press.html
+빌드 명령: B=https://raw.githubusercontent.com/youniq88/ugc/claude/progressive-merge-game-4ol028/merge-game; mkdir -p public; for f in index.html press.html presets.js; do curl -fsSL -o public/$f $B/$f; done; test -s public/presets.js
 출력 디렉터리: public
 ```
 
 빌드 명령은 256자를 넘을 수 없어서 주소를 변수로 빼 두었습니다.
 
 머지 게임과 규칙이 다른 프레스 모드는 `press.html` 로 따로 있습니다. 배포 주소 뒤에 `/press.html` 을 붙이면 열립니다.
+
+단계별 요소 정의는 `presets.js` 한 곳에 있고 두 게임이 같이 씁니다. 그래서 세 파일을 함께 올려야 합니다.
 
 ## 실행
 
@@ -359,6 +361,18 @@ UI 오른쪽 위 슬라이더로 실행 중에 바로 바꿀 수 있고, 같은 
 
 터지는 소리도 음정 없이 만들었습니다. 알갱이 버퍼를 아주 느리게(재생 속도 0.3) 깔아 터지는 순간을 만들고, 그 위에 0.55초와 0.85초짜리 고역 층을 겹쳐 조각이 멀리까지 흩날리게 했습니다. 0.13초 뒤부터는 짧은 고역 잡음 열 개가 이어지며 반짝이는 부스러기 소리를 냅니다.
 
+## 요소 동기화 (presets.js)
+
+단계별 요소(`KITS`, `PRESETS`)는 `merge-game/presets.js` 한 곳에만 있습니다. 머지 게임과 프레스 모드가 이 파일을 함께 불러 쓰므로, 여기만 고치면 두 게임에 같이 반영됩니다.
+
+```
+merge-game/presets.js   요소 정의 (두 게임 공용)
+merge-game/index.html   머지 게임
+merge-game/press.html   프레스 모드
+```
+
+평범한 `<script src="presets.js">` 라서 서버 없이 `file://` 로 열어도 그대로 됩니다. 대신 **파일을 옮기거나 셋 중 하나만 올리면 안 됩니다.** 배포와 녹화 모두 세 파일을 같은 폴더에 두고 씁니다.
+
 ## 프레스 모드 (press.html)
 
 머지 게임과 규칙이 완전히 달라서 파일을 따로 두었습니다. 합치는 게 아니라 **쪼개는** 게임입니다.
@@ -370,11 +384,22 @@ UI 오른쪽 위 슬라이더로 실행 중에 바로 바꿀 수 있고, 같은 
 `merge-game/press.html` 을 브라우저로 열면 바로 시작됩니다.
 
 ```
-?cycle=600   한 번 물었다 벌리기까지 걸리는 시간 (ms, 400~2000)
-?ball=20     공 반지름 (px, 10~40)
-?goal=460    이만큼 되면 피날레
-?ui=0        버튼 UI 없이 시작
+?preset=fruits  공에 쓸 그림 (presets.js 의 프리셋 이름. "none" 이면 단색 공)
+?cycle=600      한 번 물었다 벌리기까지 걸리는 시간 (ms, 400~2000)
+?ball=20        공 반지름 (px, 10~40)
+?goal=460       이만큼 되면 피날레
+?ui=0           버튼 UI 없이 시작
 ```
+
+### 공에 쓰는 그림
+
+머지 게임 프리셋을 그대로 가져다 씁니다. 개수가 두 배로 늘 때마다 그 프리셋의 다음 단계 그림으로 넘어가서, 한 판 안에서 프리셋의 아홉 단계를 차례로 훑습니다. 새로 생긴 그림이 화면의 절반을 차지하므로 누를 때마다 화면이 확 갈아엎어집니다.
+
+공은 전부 같은 크기라 프리셋의 `r` 값은 쓰지 않고, `img`·`scale`·`glow` 만 가져옵니다. 수백 개를 매 프레임 그려야 해서 공 한 개 크기로 미리 구워 두고(`itemSprite`) `drawImage` 만 합니다. 그림을 못 받으면 `glow` 색 단색 공으로 떨어집니다.
+
+### 눌리면 뒤쪽으로 분출된다
+
+압착판이 밀고 들어온 반대 방향, 즉 양옆으로 터져 나갑니다. 새로 생긴 공 두 개, 즙 덩어리 여섯 개, 잔 조각 아홉 개가 모두 틀 바깥면에서 좌우로 뿜어져 나갑니다. 즙은 틀보다 위에 그려서 압착판을 덮도록 했습니다.
 
 ### 압착기
 
@@ -408,7 +433,7 @@ UI 오른쪽 위 슬라이더로 실행 중에 바로 바꿀 수 있고, 같은 
 틀 모서리와 원 사이에는 공 지름의 두 배쯤 틈을 둬야 구석에 끼지 않습니다
 ```
 
-한 판이 36~39초쯤 걸립니다. 1개에서 시작해 9초에 27개, 19초에 139개, 35초에 443개까지 갑니다. 녹화 제한 62초 안에 넉넉히 들어옵니다.
+한 판이 35~38초쯤 걸립니다. 1개에서 시작해 10초에 29개, 20초에 137개, 34초에 399개까지 갑니다. 녹화 제한 62초 안에 넉넉히 들어옵니다.
 
 ### 소리
 
@@ -421,5 +446,7 @@ UI 오른쪽 위 슬라이더로 실행 중에 바로 바꿀 수 있고, 같은 
 ```
 GAME_URL=http://localhost:8765/press.html node record.js press out.mp4 5 62
 ```
+
+띄우는 폴더에 `press.html` 과 `presets.js` 가 함께 있어야 합니다.
 
 `TIERS` 와 `imgCache` 를 빈 값으로, `overSince` 를 늘 0으로 두어서 record.js 가 보는 값이 전부 있습니다. 이 모드에는 게임 오버가 없습니다.
