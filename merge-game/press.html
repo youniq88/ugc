@@ -39,6 +39,7 @@
   <button id="btnRec">● 녹화</button>
   <label title="누르는 주기 (ms): 한 번 눌렀다 열리기까지 걸리는 시간">주기 <input id="cycle" type="range" min="400" max="2000" step="20"><span id="cycleVal"></span></label>
   <label title="압착기가 벌어지는 너비의 절반 (px). 넓을수록 한 번에 많이 뭅니다">벌림 <input id="openw" type="range" min="60" max="280" step="5"><span id="openwVal"></span></label>
+  <label title="하나가 터지면 몇 개가 되는지. 클수록 훨씬 빨리 불어납니다">배수 <input id="mult" type="range" min="2" max="6" step="1"><span id="multVal"></span></label>
   <label title="눌렸을 때 세로가 원래의 몇 배까지 늘어나는지. 가로는 그만큼 줄어듭니다">늘림 <input id="stretch" type="range" min="1" max="3" step="0.05"><span id="stretchVal"></span></label>
   <label title="공 크기 (px)">공 <input id="ballr" type="range" min="10" max="40" step="1"><span id="ballrVal"></span></label>
   <label title="몇 개가 되면 끝낼지">끝 <input id="goal" type="range" min="200" max="2500" step="50"><span id="goalVal"></span></label>
@@ -52,7 +53,7 @@
   <button id="btnClose">닫기</button>
 </div>
 <div id="audioHint">🔈 화면을 한 번 탭하면 소리가 켜집니다</div>
-<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화 · Enter: 다시 시작 · URL ?preset=fruits &open=150 &stretch=1.85 &cycle=700 &ball=20 &goal=460 &ui=0</div>
+<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화 · Enter: 다시 시작 · URL ?preset=fruits &open=150 &mult=2 &stretch=1.85 &cycle=700 &ball=20 &goal=460 &ui=0</div>
 
 <script src="presets.js"></script>
 <script>
@@ -71,6 +72,7 @@ const SETTINGS = {
                          // 구석에 끼지 않는다 (공 지름의 두 배 이상)
   goal: 460,             // 이만큼 되면 피날레
   pack: 0.80,            // 원 넓이 대비 공이 차지할 비율. 빽빽할수록 압착기 입이 늘 꽉 차서 빨리 불어난다
+  mult: 2,               // 하나가 터지면 몇 개가 되는지 (2~6). 클수록 훨씬 빨리 불어난다
   stretch: 1.85,         // 눌렸을 때 세로가 원래의 몇 배까지 늘어나는지 (1~3). 가로는 그만큼 줄어든다
   openW: 150,            // 압착기가 벌어지는 너비의 절반 (px, 60~280). 보이는 크기를 정한다.
                          // 넓혀도 걸리는 시간은 거의 그대로다 (80·150·240 에서 37.4 / 36.7 / 37.9초)
@@ -93,6 +95,7 @@ const params = new URLSearchParams(location.search);
 { const v = parseFloat(params.get("goal"));  if (!isNaN(v)) SETTINGS.goal    = Math.min(2500, Math.max(50, v)); }
 { const v = parseFloat(params.get("open"));  if (!isNaN(v)) SETTINGS.openW   = Math.min(280, Math.max(60, v)); }
 { const v = parseFloat(params.get("stretch")); if (!isNaN(v)) SETTINGS.stretch = Math.min(3, Math.max(1, v)); }
+{ const v = parseFloat(params.get("mult")); if (!isNaN(v)) SETTINGS.mult = Math.min(6, Math.max(2, Math.round(v))); }
 { const v = params.get("preset"); if (v) SETTINGS.preset = v; }
 
 /* ---------- 요소 그림: 머지 게임과 같은 presets.js 를 쓴다 ---------- */
@@ -477,20 +480,22 @@ function squashFor(sy) { return 1 / (sy * sy); }
 
 // 한 개가 터지면서 두 개가 된다. 양옆으로 즙처럼 뿜어져 나간다
 function burst(b) {
-  const r = SETTINGS.ballR, hw = pressHalfW();
-  for (let i = 0; i < 2; i++) {                                 // 눌린 자리에서 압착판 뒤쪽, 즉 양옆으로 하나씩 튀어 나간다
-    const dir = i ? 1 : -1, sp = 520 + Math.random()*420, a = (Math.random()-.5)*0.9;
-    spawn(ARENA.cx + dir*(hw + r*1.15), b.y + (Math.random()-.5)*r*1.6,
+  const r = SETTINGS.ballR, hw = pressHalfW(), m = Math.max(2, Math.round(SETTINGS.mult));
+  for (let i = 0; i < m; i++) {                                 // 눌린 자리에서 압착판 뒤쪽, 즉 양옆으로 튀어 나간다
+    const dir = i % 2 ? 1 : -1, lane = Math.floor(i / 2);       // 한쪽에 여러 개면 뒤로·위아래로 벌려 놓는다
+    const sp = 520 + Math.random()*420, a = (Math.random()-.5)*0.9;
+    spawn(ARENA.cx + dir*(hw + r*1.15 + lane*r*0.9),
+          b.y + (Math.random()-.5)*r*1.6 + (lane ? (lane % 2 ? 1 : -1) * Math.ceil(lane/2) * r*1.5 : 0),
           dir*Math.cos(a)*sp, Math.sin(a)*sp, 380);
     balls[balls.length-1].pop = 1;
   }
-  for (let i = 0; i < 6; i++) {                                 // 압착판 뒤쪽 양옆으로 뿜어져 나오는 즙 덩어리
+  for (let i = 0; i < 3*m; i++) {                               // 압착판 뒤쪽 양옆으로 뿜어져 나오는 즙 덩어리
     const dir = i % 2 ? 1 : -1;
     goo.push({ x: ARENA.cx + dir*(hw + 4), y: b.y + (Math.random()-.5)*PRESS.halfH*1.2,
                vx: dir*(420 + Math.random()*560), vy: (Math.random()-.5)*300,
                r: 20 + Math.random()*32, life: 1, color: b.color });
   }
-  for (let i = 0; i < 9; i++) {                                 // 잘게 튀는 조각도 뒤쪽으로 치우친다
+  for (let i = 0; i < 4*m + 1; i++) {                           // 잘게 튀는 조각도 뒤쪽으로 치우친다
     const dir = i % 2 ? 1 : -1, a = (Math.random()-.5)*1.5, sp = 320 + Math.random()*880;
     particles.push({ x: ARENA.cx + dir*hw, y: b.y, vx: dir*Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 1,
                      size: 3 + Math.random()*6, color: b.color, spin: Math.random()*Math.PI, spinV: (Math.random()-.5)*22 });
@@ -699,17 +704,20 @@ btnPause.onclick = () => setPaused(!paused);
 document.getElementById("btnReset").onclick = () => { reset(); setPaused(false); };
 
 const openwIn = document.getElementById("openw"), openwVal = document.getElementById("openwVal");
+const multIn = document.getElementById("mult"), multVal = document.getElementById("multVal");
 const stretchIn = document.getElementById("stretch"), stretchVal = document.getElementById("stretchVal");
 const cycleIn = document.getElementById("cycle"), cycleVal = document.getElementById("cycleVal");
 const ballrIn = document.getElementById("ballr"), ballrVal = document.getElementById("ballrVal");
 const goalIn  = document.getElementById("goal"),  goalVal  = document.getElementById("goalVal");
 function syncUI() {
   openwIn.value = SETTINGS.openW;   openwVal.textContent = SETTINGS.openW;
+  multIn.value = SETTINGS.mult;       multVal.textContent = "×" + SETTINGS.mult;
   stretchIn.value = SETTINGS.stretch; stretchVal.textContent = SETTINGS.stretch.toFixed(2) + "배";
   cycleIn.value = SETTINGS.cycleMs; cycleVal.textContent = SETTINGS.cycleMs + "ms";
   ballrIn.value = SETTINGS.ballR;   ballrVal.textContent = SETTINGS.ballR;
   goalIn.value  = SETTINGS.goal;    goalVal.textContent  = SETTINGS.goal;
 }
+multIn.oninput    = () => { SETTINGS.mult = +multIn.value; syncUI(); reset(); };   // 색이 바뀌는 간격도 달라져서 처음부터
 stretchIn.oninput = () => { SETTINGS.stretch = +stretchIn.value; syncUI(); };   // 바로 반영된다 (다시 시작할 필요 없음)
 openwIn.oninput = () => { SETTINGS.openW = +openwIn.value; PRESS.openHalf = SETTINGS.openW; syncUI(); reset(); };
 cycleIn.oninput = () => { SETTINGS.cycleMs = +cycleIn.value; syncUI(); };
