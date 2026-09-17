@@ -153,11 +153,11 @@ function itemSprite(i) {
     // 코드로 그리는 요소 (블랙홀·보석·행성 등). 머지 게임과 같은 SHAPES 를 쓴다.
     // 머지 게임은 base 층과 light 층을 따로 두지만 여기 공은 돌지 않으므로 한 장에 겹쳐 굽는다
     g.save(); g.translate(S/2, S/2);
-    if (t.shape !== "blackhole") {                              // 바깥으로 퍼지는 빛 (블랙홀은 빛을 내지 않는다)
-      const soft = t.shape === "star" || t.shape === "sun";
+    const [halo, hr] = glowDisc(t.shape);                       // 바깥으로 퍼지는 빛 (세기는 presets.js 의 GLOW_DISC)
+    if (halo > 0) {
       g.save(); g.shadowColor = t.glow || "#fff"; g.shadowBlur = pad*1.6; g.fillStyle = t.glow || "#fff";
-      g.beginPath(); g.arc(0, 0, r*(soft ? 0.72 : 0.92), 0, Math.PI*2);
-      g.globalAlpha = soft ? 0.5 : 0.85; g.fill(); g.shadowBlur = pad*0.7; g.fill(); g.restore();
+      g.beginPath(); g.arc(0, 0, r*hr, 0, Math.PI*2);
+      g.globalAlpha = halo; g.fill(); g.shadowBlur = pad*0.7; g.fill(); g.restore();
     }
     const draw = SHAPES[t.shape] || SHAPES.sphere;
     LIGHT_PASS = false; draw(g, r, t);

@@ -194,6 +194,23 @@ const PRESETS = {
       { r:190, drawR:380, img:"7e7ed043-8e64-4e45-9ae2-32d40ddba0b9.png", frames:["7e7ed043-8e64-4e45-9ae2-32d40ddba0b9.png","2449d29f-9729-4f4c-a63a-66b70fd73c74.png","f4ccabb7-dc28-4263-9387-ab31528d8d4f.png"], glow:"#ffcf3d", scale:1.10, noSpin:true },   // 여섯 보석이 박힌 황금 건틀릿 (충돌은 190, 그림은 두 배 크게. frames = 손가락을 튕기는 장면)
     ],
   },
+  density: {   // 9단계 한 숟갈의 무게: 우주먼지 → 구름 → 물 → 바위 → 쇳덩이 → 태양 중심 → 백색왜성 → 중성자별 → 블랙홀
+    // 같은 한 숟갈인데 무게만 바뀌는 사다리입니다. 1cm3 당 무게가 10의 -24제곱 g 에서 사실상 무한대까지 갑니다.
+    // 실제로는 무거워질수록 더 작게 눌리지만, 게임은 단계가 올라갈수록 커져야 하므로 반지름은 다른 프리셋과 같은 간격을 씁니다.
+    // 요소가 전부 물질 덩어리라 이미지 대신 코드로 그립니다(그래서 이 프리셋은 kit 이 없습니다).
+    sound: "quake", finale: "vortex",   // 블랙홀이 나오면 남은 것을 전부 빨아들이고 화면이 닫힘
+    items: [
+      { r:36,  shape:"dust",      glow:"#b9bed8" },                 // 우주먼지 10^-24 g/cm3 (1cm3 에 원자 몇 개)
+      { r:46,  shape:"cloud",     glow:"#dfe9f5" },                 // 구름 0.0005 g/cm3
+      { r:57,  shape:"water",     glow:"#3ea6ff" },                 // 물 1 g/cm3 (기준점)
+      { r:71,  shape:"rock",      glow:"#8a8178" },                 // 바위 3 g/cm3
+      { r:88,  shape:"iron",      glow:"#9fb4c8" },                 // 철 7.9 g/cm3
+      { r:108, shape:"solarcore", glow:"#ffb02e", noSpin:true },    // 태양 중심 150 g/cm3 (금의 여덟 배인데 기체)
+      { r:132, shape:"whitedwarf",glow:"#9fd0ff", noSpin:true },    // 백색왜성 10^6 g/cm3 (한 숟갈에 1톤)
+      { r:160, shape:"neutron",   glow:"#8ec8ff", noSpin:true },    // 중성자별 4x10^14 g/cm3 (한 숟갈에 산 하나 무게)
+      { r:195, shape:"blackhole", glow:"#ff9a3d", noSpin:true },    // 블랙홀 (특이점, 밀도를 셀 수 없음)
+    ],
+  },
   heatdeath: { // 9단계 우주의 마지막 날: 별 탄생 → 붉은 거성 → 백색왜성 → 은하 충돌 → 마지막 별 → 검은 왜성 → 블랙홀의 시대 → 호킹 증발 → 열적 죽음
     // 시간 순서입니다. 지금 새 별에 불이 켜지는 데서 시작해, 10^100 년 뒤 아무 일도 일어나지 않는 텅 빈 공간에서 끝납니다.
     // 뒤로 갈수록 크기는 커지지만 빛은 계속 줄어듭니다 (마지막 두 단계는 거의 검은 구).
@@ -377,6 +394,19 @@ function bands(g, r, cols, count, alpha) {
   }
   g.globalAlpha = 1;
 }
+// 코드로 그리는 도형 뒤에 까는 글로우 원판의 [알파, 반지름 비율]입니다. 기본값은 도형을 거의 꽉 채우는 원판이라
+// 알맹이가 작은 도형(중성자별처럼)은 원판이 도형을 덮어 단색 공으로 보입니다. 그런 도형은 여기서 줄이거나 없앱니다.
+// 머지 게임(index.html)과 프레스 모드(press.html)가 함께 씁니다.
+const GLOW_DISC = {
+  star:       [0.5,  0.72],
+  sun:        [0.5,  0.72],
+  solarcore:  [0.4,  0.66],
+  whitedwarf: [0.3,  0.58],
+  neutron:    [0.16, 0.34],
+  blackhole:  [0,    0],
+  voidend:    [0.22, 0.9],
+};
+function glowDisc(shape) { return GLOW_DISC[shape] || [0.85, 0.92]; }
 const SHAPES = {
   sphere(g, r, t) { drawSphere(g, r, t.colors || ["#ffffff", "#888888"]); },
   pearl(g, r, t) {
@@ -458,6 +488,138 @@ const SHAPES = {
       g.fillStyle = "rgba(255,120,0,0.35)"; blob(g, -r*0.3, r*0.2, r*0.35, r*0.2, 0.5); blob(g, r*0.35, -r*0.25, r*0.25, r*0.18, -0.3); blob(g, r*0.1, r*0.5, r*0.2, r*0.1);
       const core = g.createRadialGradient(-r*0.2, -r*0.2, 0, 0, 0, r); core.addColorStop(0, "rgba(255,255,230,0.9)"); core.addColorStop(0.5, "rgba(255,230,120,0)"); g.fillStyle = core; g.fillRect(-r, -r, 2*r, 2*r);
     } });
+  },
+  dust(g, r) {                                    // 우주먼지: 1cm3 에 원자 몇 개. 거의 비어 있어서 뭉치지도 못하는 성간 티끌
+    if (!LIGHT_PASS) {
+      const haze = g.createRadialGradient(-r*0.2, -r*0.25, r*0.05, 0, 0, r);
+      haze.addColorStop(0, "rgba(176,180,200,0.34)"); haze.addColorStop(0.55, "rgba(120,124,146,0.2)"); haze.addColorStop(1, "rgba(80,84,104,0.04)");
+      g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fillStyle = haze; g.fill();
+      g.save(); g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.clip();
+      for (let i = 0; i < 90; i++) {                // 알갱이 하나하나가 따로 떠 있음
+        const a = i * 2.39996, rr = r * Math.sqrt((i * 0.0111) % 1) * 0.97;
+        g.beginPath(); g.arc(Math.cos(a)*rr, Math.sin(a)*rr, r * (0.008 + ((i * 0.31) % 1) * 0.022), 0, Math.PI*2);
+        g.fillStyle = `rgba(${210 + (i%3)*15},${208 + (i%4)*10},${226},${0.25 + ((i*0.17)%1)*0.6})`; g.fill();
+      }
+      g.restore();
+      return;
+    }
+    const rim = g.createRadialGradient(0, 0, r*0.7, 0, 0, r);
+    rim.addColorStop(0, "rgba(0,0,0,0)"); rim.addColorStop(1, "rgba(198,204,228,0.14)");
+    g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fillStyle = rim; g.fill();
+  },
+  cloud(g, r) {                                   // 구름: 한 숟갈이면 물 한 방울도 안 됨. 뭉게뭉게한 흰 덩어리
+    drawSphere(g, r, ["#ffffff", "#b9c6d8"], { noGloss: true, detail(g, r) {
+      g.fillStyle = "rgba(255,255,255,0.85)";
+      blob(g, -r*0.32, -r*0.18, r*0.42, r*0.34); blob(g, r*0.22, -r*0.34, r*0.34, r*0.3);
+      blob(g, r*0.34, r*0.14, r*0.36, r*0.3);     blob(g, -r*0.18, r*0.34, r*0.4, r*0.3);
+      g.fillStyle = "rgba(150,168,192,0.35)";
+      blob(g, -r*0.05, r*0.52, r*0.5, r*0.2, 0.1); blob(g, r*0.42, r*0.42, r*0.26, r*0.14, 0.4);
+      g.fillStyle = "rgba(255,255,255,0.6)"; blob(g, -r*0.38, -r*0.42, r*0.24, r*0.16, -0.3);
+    } });
+  },
+  water(g, r) {                                   // 물: 기준점. 1cm3 에 정확히 1g
+    drawSphere(g, r, ["#bfefff", "#0b5ea8"], { detail(g, r) {
+      const inner = g.createRadialGradient(r*0.25, r*0.3, r*0.05, 0, 0, r);   // 아래쪽으로 빛이 모이는 물방울 속
+      inner.addColorStop(0, "rgba(180,240,255,0.75)"); inner.addColorStop(0.5, "rgba(60,150,220,0.2)"); inner.addColorStop(1, "rgba(10,60,130,0)");
+      g.fillStyle = inner; g.fillRect(-r, -r, 2*r, 2*r);
+      g.strokeStyle = "rgba(255,255,255,0.4)"; g.lineWidth = r*0.05;
+      g.beginPath(); g.arc(0, 0, r*0.78, 0.7, 2.1); g.stroke();
+    } });
+  },
+  rock(g, r) {                                    // 바위: 물의 세 배쯤. 여기서부터는 손으로 들면 묵직함
+    drawSphere(g, r, ["#fbf4e6", "#9a8d7c"], { noGloss: true, detail(g, r) {
+      for (let i = 0; i < 13; i++) {               // 패인 자국: 아래는 어둡고 위 테두리에 빛이 걸림
+        const a = i * 2.39996, rr = r * (0.12 + ((i * 0.41) % 1) * 0.74);
+        const x = Math.cos(a)*rr, y = Math.sin(a)*rr, cr = r * (0.07 + ((i*0.23)%1)*0.11);
+        g.fillStyle = "rgba(255,252,244,0.34)"; g.beginPath(); g.arc(x, y, cr, 0, Math.PI*2); g.fill();          // 테두리 둔덕
+        g.fillStyle = "rgba(42,34,27,0.5)";     g.beginPath(); g.arc(x, y, cr*0.84, 0, Math.PI*2); g.fill();     // 구멍 안 그늘
+        g.fillStyle = "rgba(255,250,238,0.4)";  g.beginPath(); g.arc(x + cr*0.2, y + cr*0.24, cr*0.5, 0, Math.PI*2); g.fill();   // 빛이 닿는 건너편 벽
+      }
+      for (let i = 0; i < 46; i++) {               // 거친 표면의 알갱이
+        const a = i * 2.39996, rr = r * Math.sqrt((i * 0.0218) % 1) * 0.95;
+        g.fillStyle = i % 2 ? "rgba(255,252,244,0.3)" : "rgba(40,33,26,0.3)";
+        g.beginPath(); g.arc(Math.cos(a)*rr, Math.sin(a)*rr, r*0.024, 0, Math.PI*2); g.fill();
+      }
+      g.strokeStyle = "rgba(44,36,28,0.5)"; g.lineWidth = Math.max(1, r*0.032); g.lineCap = "round";
+      g.beginPath(); g.moveTo(-r*0.8, r*0.24); g.lineTo(-r*0.12, r*0.0); g.lineTo(r*0.4, r*0.4); g.stroke();
+      g.strokeStyle = "rgba(255,252,244,0.4)"; g.lineWidth = Math.max(1, r*0.016);
+      g.beginPath(); g.moveTo(-r*0.8, r*0.19); g.lineTo(-r*0.12, -r*0.05); g.lineTo(r*0.4, r*0.35); g.stroke();
+    } });
+  },
+  iron(g, r) {                                    // 쇳덩이: 물의 여덟 배. 같은 크기인데 갑자기 못 드는 무게가 됨
+    drawSphere(g, r, ["#ced9e4", "#20262f"], { detail(g, r) {
+      const m = g.createLinearGradient(0, -r, 0, r);           // 매끈하게 광 낸 쇠공의 세로 반사
+      m.addColorStop(0,    "rgba(12,15,20,0.85)");             // 위: 어두운 하늘이 비침
+      m.addColorStop(0.2,  "rgba(96,112,130,0.3)");
+      m.addColorStop(0.36, "rgba(255,255,255,0.8)");           // 수평선에 걸리는 밝은 띠
+      m.addColorStop(0.46, "rgba(150,168,186,0.15)");
+      m.addColorStop(0.7,  "rgba(10,13,18,0.8)");              // 아래: 다시 깊게 어두움
+      m.addColorStop(0.9,  "rgba(196,212,230,0.45)");          // 바닥에서 튄 빛
+      m.addColorStop(1,    "rgba(12,15,20,0.7)");
+      g.fillStyle = m; g.fillRect(-r, -r, 2*r, 2*r);
+      const streak = g.createLinearGradient(-r*0.9, -r*0.9, r*0.3, r*0.3);
+      streak.addColorStop(0, "rgba(255,255,255,0)"); streak.addColorStop(0.5, "rgba(255,255,255,0.5)"); streak.addColorStop(1, "rgba(255,255,255,0)");
+      g.save(); g.rotate(-0.5); g.fillStyle = streak; g.fillRect(-r, -r*0.16, 2*r, r*0.32); g.restore();
+    } });
+  },
+  solarcore(g, r) {                               // 태양 중심: 물의 150배. 금보다 무거운데 기체 상태로 눌려 있음
+    const body = r*0.92;
+    if (LIGHT_PASS) return;
+    const halo = g.createRadialGradient(0, 0, body*0.85, 0, 0, r);
+    halo.addColorStop(0, "rgba(255,240,180,0.8)"); halo.addColorStop(1, "rgba(255,170,40,0)");
+    g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fillStyle = halo; g.fill();
+    const base = g.createRadialGradient(0, 0, 0, 0, 0, body);   // 안쪽이 가장 밝은 압축 플라스마
+    base.addColorStop(0, "#ffffff"); base.addColorStop(0.3, "#fff2b0"); base.addColorStop(0.68, "#ffab2e"); base.addColorStop(1, "#d84a06");
+    g.beginPath(); g.arc(0, 0, body, 0, Math.PI*2); g.fillStyle = base; g.fill();
+    g.save(); g.beginPath(); g.arc(0, 0, body, 0, Math.PI*2); g.clip();
+    for (let i = 0; i < 16; i++) {                 // 끓어오르는 대류 세포
+      const a = i * 2.39996, rr = body * (0.25 + ((i * 0.43) % 1) * 0.7);
+      g.fillStyle = `rgba(255,${130 + (i%5)*16},${20 + (i%3)*18},0.3)`;
+      blob(g, Math.cos(a)*rr, Math.sin(a)*rr, body * (0.1 + ((i*0.29)%1)*0.16), body * (0.07 + ((i*0.19)%1)*0.12), a);
+    }
+    g.restore();
+  },
+  whitedwarf(g, r) {                              // 백색왜성: 한 숟갈이 1톤. 태양이 지구만 하게 눌린 뒤 남은 재
+    const body = r*0.8;
+    if (LIGHT_PASS) return;
+    const halo = g.createRadialGradient(0, 0, body*0.96, 0, 0, r);   // 알맹이에 딱 붙은 얇은 무리
+    halo.addColorStop(0, "rgba(215,240,255,0.5)"); halo.addColorStop(0.5, "rgba(150,205,255,0.14)"); halo.addColorStop(1, "rgba(120,180,255,0)");
+    g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fillStyle = halo; g.fill();
+    const base = g.createRadialGradient(-body*0.2, -body*0.22, 0, 0, 0, body);
+    base.addColorStop(0, "#ffffff"); base.addColorStop(0.4, "#f4fbff"); base.addColorStop(0.78, "#bfe0ff"); base.addColorStop(1, "#6fa2dc");
+    g.beginPath(); g.arc(0, 0, body, 0, Math.PI*2); g.fillStyle = base; g.fill();
+    g.save(); g.beginPath(); g.arc(0, 0, body, 0, Math.PI*2); g.clip();   // 유리처럼 단단하게 굳은 결정 표면
+    g.strokeStyle = "rgba(255,255,255,0.3)"; g.lineWidth = Math.max(1, body*0.02);
+    for (let i = 0; i < 7; i++) {
+      const a = i * 2.39996;
+      g.beginPath(); g.moveTo(Math.cos(a)*body, Math.sin(a)*body); g.lineTo(Math.cos(a+2.1)*body, Math.sin(a+2.1)*body); g.stroke();
+    }
+    g.restore();
+    g.save(); g.shadowColor = "rgba(225,244,255,0.95)"; g.shadowBlur = body*0.3;
+    g.beginPath(); g.arc(0, 0, body*0.985, 0, Math.PI*2); g.strokeStyle = "rgba(255,255,255,0.9)"; g.lineWidth = body*0.045; g.stroke(); g.restore();
+  },
+  neutron(g, r) {                                 // 중성자별: 한 숟갈이 산 하나 무게. 태양이 도시 하나 크기로 눌린 것
+    const body = r*0.26;
+    if (LIGHT_PASS) return;
+    g.save(); g.rotate(-0.38);
+    for (const dir of [-1, 1]) {                   // 자극에서 뿜는 가느다란 두 줄기 빔
+      const beam = g.createLinearGradient(0, 0, 0, dir*r);
+      beam.addColorStop(0, "rgba(245,251,255,1)"); beam.addColorStop(0.3, "rgba(175,205,255,0.7)"); beam.addColorStop(0.65, "rgba(140,170,255,0.3)"); beam.addColorStop(1, "rgba(120,140,255,0)");
+      g.beginPath(); g.moveTo(-body*0.5, 0); g.lineTo(body*0.5, 0); g.lineTo(body*1.5, dir*r); g.lineTo(-body*1.5, dir*r); g.closePath();
+      g.fillStyle = beam; g.fill();
+    }
+    for (const k of [0.34, 0.56, 0.8]) {           // 별을 휘감은 자기력선
+      g.beginPath(); g.ellipse(0, 0, r*k*0.46, r*k, 0, 0, Math.PI*2);
+      g.strokeStyle = `rgba(190,218,255,${0.72 - (k-0.34)*0.6})`; g.lineWidth = Math.max(1, r*0.02); g.stroke();
+    }
+    g.restore();
+    const halo = g.createRadialGradient(0, 0, body*0.5, 0, 0, r*0.34);   // 알맹이 둘레만 좁게 탄다
+    halo.addColorStop(0, "rgba(220,240,255,0.85)"); halo.addColorStop(0.35, "rgba(140,180,255,0.35)"); halo.addColorStop(1, "rgba(100,130,255,0)");
+    g.beginPath(); g.arc(0, 0, r*0.34, 0, Math.PI*2); g.fillStyle = halo; g.fill();
+    g.save(); g.shadowColor = "rgba(235,246,255,1)"; g.shadowBlur = r*0.22;   // 눈에 박히는 흰 점
+    const base = g.createRadialGradient(0, 0, 0, 0, 0, body);
+    base.addColorStop(0, "#ffffff"); base.addColorStop(0.6, "#e6f2ff"); base.addColorStop(1, "#a9c8ff");
+    g.beginPath(); g.arc(0, 0, body, 0, Math.PI*2); g.fillStyle = base; g.fill(); g.restore();
   },
   blackdwarf(g, r) {                              // 검은 왜성: 다 식어 빛을 잃은 별의 시체. 식으면서 갈라진 껍질과 아주 옅은 붉은 잔열만 남음
     if (!LIGHT_PASS) {

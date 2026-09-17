@@ -1371,11 +1371,12 @@ function makeSprite(t) {
     const g = c.getContext("2d"); g.translate(S/2, S/2);
     LIGHT_PASS = light;
     const hasImg = img && img.complete && img.naturalWidth;
-    if (!light && !hasImg && !t.emoji && t.shape !== "blackhole") {   // 코드 도형: 바깥 글로우 원판 (두 겹)
-      const soft = t.shape === "star" || t.shape === "sun";
-      const halo = soft ? 0.5 : 0.85, haloR = soft ? r*0.72 : r*0.92;
-      g.save(); g.shadowColor = t.glow || "#fff"; g.shadowBlur = pad; g.fillStyle = t.glow || "#fff";
-      g.beginPath(); g.arc(0, 0, haloR, 0, Math.PI*2); g.globalAlpha = halo; g.fill(); g.shadowBlur = pad*0.45; g.fill(); g.restore();
+    if (!light && !hasImg && !t.emoji) {                              // 코드 도형: 바깥 글로우 원판 (두 겹)
+      const [halo, hr] = glowDisc(t.shape);                           // 세기는 presets.js 의 GLOW_DISC 가 정한다
+      if (halo > 0) {
+        g.save(); g.shadowColor = t.glow || "#fff"; g.shadowBlur = pad; g.fillStyle = t.glow || "#fff";
+        g.beginPath(); g.arc(0, 0, r*hr, 0, Math.PI*2); g.globalAlpha = halo; g.fill(); g.shadowBlur = pad*0.45; g.fill(); g.restore();
+      }
     }
     if (hasImg) {
       // 키트 PNG: 그림의 실루엣을 따라 글로우 (가운데 원판 없음). 조명은 그림에 이미 있으므로 light 층 없음
