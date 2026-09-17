@@ -43,6 +43,7 @@
   <label title="낙하 속도: 관에서 내려오는 속도 (px/s)">낙하 <input id="speed" type="range" min="200" max="2000" step="10"><span id="speedVal"></span></label>
   <label title="분당 발사 수: 1분에 몇 개를 떨어뜨릴지 (관이 막히지 않는 최대치까지만 올라갑니다)">발사 <input id="rate" type="range" min="10" max="1000" step="5"><span id="rateVal"></span></label>
   <label title="중력: 그릇 안에서 아래로 당기는 힘 (px/s²)">중력 <input id="grav" type="range" min="400" max="8000" step="50"><span id="gravVal"></span></label>
+  <label title="요소 크기: 모든 단계의 크기를 같은 비율로 줄이거나 키웁니다 (줄이면 그릇에 더 많이 담겨 더 오래 갑니다)">크기 <input id="size" type="range" min="0.4" max="1.5" step="0.05"><span id="sizeVal"></span></label>
   <label title="관 개수: 요소가 내려오는 통로를 1~3개로 늘립니다 (늘리면 동시에 여러 줄이 떨어져 더 빨리 찹니다)">관 <input id="tubes" type="range" min="1" max="3" step="1"><span id="tubesVal"></span></label>
   <button id="btnHide">UI 숨기기</button>
 </div>
@@ -54,7 +55,7 @@
   <button id="btnClose">닫기</button>
 </div>
 <div id="audioHint">🔈 화면을 한 번 탭하면 소리가 켜집니다</div>
-<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화(시작 시 UI 자동 숨김) · Enter: 다시 시작 · 모드: UI 왼쪽 위에서 프레스 게임으로 바꿀 수 있습니다 · URL ?preset=이름 &bounce=0.7 &speed=950 &rate=40 &gravity=2600 &tubes=2 &ui=0</div>
+<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화(시작 시 UI 자동 숨김) · Enter: 다시 시작 · 모드: UI 왼쪽 위에서 프레스 게임으로 바꿀 수 있습니다 · URL ?preset=이름 &bounce=0.7 &speed=950 &rate=40 &gravity=2600 &tubes=2 &size=0.7 &ui=0</div>
 
 <script src="presets.js"></script>
 <script>
@@ -126,6 +127,21 @@ layoutTubes();
 const params = new URLSearchParams(location.search);
 let presetName = params.get("preset") in PRESETS ? params.get("preset") : SETTINGS.preset;
 let TIERS = PRESETS[presetName].items;
+let sizeOverride = null;                 // 요소 크기 배율 (모든 단계의 반지름에 같은 값을 곱한다)
+function sizeScale() { return sizeOverride ?? 1; }
+// 프리셋이 정한 단계별 반지름에 같은 배율을 곱합니다. 프레스 모드의 공 크기 조절과 같은 자리입니다.
+// 원래 값을 _r0 에 넣어 두고 언제나 거기서 다시 계산하므로, 배율을 오르내려도 값이 조금씩 밀리지 않습니다.
+// 떨어뜨릴 단계 수는 관을 통과하는 크기까지만 쓰도록 깎이므로(randTier), 크기를 줄이면 덜 깎입니다.
+// 다만 프리셋이 정한 dropTiers 를 넘지는 않으니, 왁뿌볼(5)처럼 여러 단계를 섞는 프리셋에서만 차이가 납니다.
+function applySize() {
+  const k = sizeScale();
+  for (const t of TIERS) {
+    if (t._r0 == null) { t._r0 = t.r; t._drawR0 = t.drawR ?? null; }
+    t.r = Math.max(6, Math.round(t._r0 * k));
+    if (t._drawR0 != null) t.drawR = Math.round(t._drawR0 * k);
+    t._sprite = null; t._frames = null; t._shell = null;   // 크기가 바뀌었으니 구워 둔 그림을 버린다
+  }
+}
 
 let bodies = [], particles = [], popups = [], rings = [], confetti = [], bolts = [], fxQueue = [], drifts = [], arrows = [];
 let ended = false, endedAt = 0;          // 마지막 단계 도달 후 정지 상태
@@ -787,6 +803,7 @@ function bounce() { return bounceOverride ?? presetBounce(); }
 { const v = parseFloat(params.get("rate"));    if (!isNaN(v)) rateOverride  = Math.min(1000, Math.max(10, v)); }
 { const v = parseFloat(params.get("gravity")); if (!isNaN(v)) gravOverride  = Math.min(8000, Math.max(400, v)); }
 { const v = parseInt(params.get("tubes"), 10); if (!isNaN(v)) { tubeCountOverride = Math.min(3, Math.max(1, v)); layoutTubes(); } }
+{ const v = parseFloat(params.get("size"));    if (!isNaN(v)) sizeOverride   = Math.min(1.5, Math.max(0.4, v)); }
 function step(dt) {
   const g = gravity(), ph = presetPhysics(), e = bounce(), wob = ph.wobble || 0;
   for (const b of bodies) {
@@ -2045,7 +2062,7 @@ modeSel.onchange = () => {
 const sel = document.getElementById("presetSel");
 for (const k of Object.keys(PRESETS)) { const o = document.createElement("option"); o.value = k; o.textContent = k; sel.appendChild(o); }
 sel.value = presetName;
-sel.onchange = () => { presetName = sel.value; TIERS = PRESETS[presetName].items; bounceOverride = speedOverride = rateOverride = gravOverride = null; syncBounceUI(); syncTuneUI(); setPaused(true); loadImages().then(() => { reset(); setPaused(false); }); };
+sel.onchange = () => { presetName = sel.value; TIERS = PRESETS[presetName].items; applySize(); bounceOverride = speedOverride = rateOverride = gravOverride = null; syncBounceUI(); syncTuneUI(); setPaused(true); loadImages().then(() => { reset(); setPaused(false); }); };
 const bounceIn = document.getElementById("bounce"), bounceVal = document.getElementById("bounceVal");
 function syncBounceUI() { bounceIn.value = bounce(); bounceVal.textContent = bounce().toFixed(2); }
 bounceIn.oninput = () => { bounceOverride = parseFloat(bounceIn.value); syncBounceUI(); };   // 슬라이더는 즉시 반영 (프리셋을 바꾸면 그 프리셋 기본값으로 돌아감)
@@ -2066,6 +2083,16 @@ speedIn.oninput = () => { speedOverride = parseFloat(speedIn.value); syncTuneUI(
 rateIn.oninput  = () => { rateOverride  = parseFloat(rateIn.value);  syncTuneUI(); };
 gravIn.oninput  = () => { gravOverride  = parseFloat(gravIn.value);  syncTuneUI(); };
 // 관 개수 (프리셋을 바꿔도 그대로 둡니다. 무대 설정이라 프리셋과 무관)
+// 요소 크기 슬라이더 (즉시 반영, 크기가 바뀌면 판이 달라지므로 새로 시작합니다)
+const sizeIn = document.getElementById("size"), sizeVal = document.getElementById("sizeVal");
+function syncSizeUI() { sizeIn.value = sizeScale(); sizeVal.textContent = sizeScale().toFixed(2) + "배"; }
+sizeIn.oninput = () => {
+  sizeOverride = parseFloat(sizeIn.value); syncSizeUI();
+  applySize();
+  if (PRESETS[presetName].shell) bakeShells();
+  reset();
+};
+syncSizeUI();
 const tubesIn = document.getElementById("tubes"), tubesVal = document.getElementById("tubesVal");
 tubesIn.oninput = () => {
   tubeCountOverride = parseInt(tubesIn.value, 10);
@@ -2151,6 +2178,7 @@ addEventListener("keydown", e => {
 });
 
 paused = true; reset(); requestAnimationFrame(loop);
+applySize();
 loadImages().then(() => { reset(); setPaused(false); });   // 키트 이미지가 준비되면 시작
 </script>
 </body>
