@@ -928,6 +928,7 @@ function finale(x, y, color) {
   if (kind === "snap")      { snapFinale(x, y, palette); return; }        // 손가락을 튕겨 절반이 사라짐
   if (kind === "annihilate"){ annihilateFinale(x, y, palette); return; }  // 반물질이 터져 전부 사라짐
   if (kind === "durian")    { durianFinale(x, y, palette); return; }      // 두리안 왁스가 저절로 갈라지다 팡 터짐
+  if (kind === "cool")      { coolFinale(x, y, palette); return; }        // 남은 것이 하나씩 식어 꺼지고 화면이 완전히 검게 닫힘
   confettiBurst(x, y, palette);
   setTimeout(() => SFX.merge(TIERS.length - 1), 0); setTimeout(() => SFX.merge(TIERS.length - 2), 180); setTimeout(() => SFX.merge(TIERS.length - 1), 360);
 }
@@ -1149,6 +1150,34 @@ function ashMote(b) {                                               // 흩어지
     swing: 30 + Math.random()*50, sway: Math.random()*6.28, rot: Math.random()*6.28, spin: (Math.random()-.5)*3,
     w: 4 + Math.random()*8, h: 3 + Math.random()*6, life: 2.4,
     color: ["#e8dcc8", "#bfb6a6", "#8f877a", "#fff3d8"][Math.floor(Math.random()*4)] });
+}
+
+/* ---------- 냉각 피날레 (열적 죽음) ---------- */
+// 열적 죽음이 나오면 우주에 더는 쓸 수 있는 에너지가 남지 않습니다. 남은 천체들이 있던 자리에 그대로 멈춰 서고,
+// 먼 것부터 차례로 색을 잃고 식다가 마지막 빛 한 점만 남기고 꺼집니다. 전부 꺼진 뒤에는 화면도 같이 식어 완전히 검게 닫힙니다.
+function coolFinale(x, y, palette) {
+  finaleBusy = true; physicsHoldMs = 14000;
+  const end = bodies.find(b => b.tier === TIERS.length - 1) || { x, y, r: TIERS[TIERS.length-1].r };
+  end.pin = { x: BOWL.cx, y: BOWL.cy - BOWL.R*0.06 };                      // 텅 빈 공간이 한가운데로 와서 멈춘다
+  later(200, () => { nightDimTo = 1; SFX.nightfall(); });                  // 1) 온 화면이 식기 시작한다
+  const targets = bodies.filter(b => b !== end)                            // 2) 먼 것부터 꺼진다 (가까운 것이 마지막까지 버틴다)
+    .sort((a, b) => Math.hypot(b.x-end.x, b.y-end.y) - Math.hypot(a.x-end.x, a.y-end.y));
+  const gap = targets.length ? Math.min(180, 2600 / targets.length) : 0;
+  targets.forEach((b, i) => later(700 + i*gap, () => {
+    if (b.cool != null) return;
+    b.cool = 0; b.pin = { x: b.x, y: b.y };                                // 그 자리에 그대로 멈춘다
+    if (i % 3 === 0) SFX.suck(0.12 + 0.05*(i % 4));
+  }));
+  later(700 + targets.length*gap + 1700, () => {                           // 3) 마지막 빛까지 꺼지고 화면이 닫힌다
+    voidDimTo = 1; SFX.collapse();
+    rings.push({ x: end.x, y: end.y, r0: end.r*0.9, color: "#9fb6dc", t: 0 });
+  });
+}
+function lastPhoton(b) {                                                   // 꺼지기 직전에 흘러나오는 마지막 빛 한 점
+  const a = Math.random()*Math.PI*2, r = b.r * (0.2 + Math.random()*0.7);
+  drifts.push({ x: b.x + Math.cos(a)*r, y: b.y + Math.sin(a)*r, vx: (Math.random()-.5)*26, vy: (Math.random()-.5)*26, g: 0,
+    swing: 6 + Math.random()*14, sway: Math.random()*6.28, rot: 0, spin: 0,
+    w: 2 + Math.random()*4, h: 0, life: 2.6, color: ["#b9cdea", "#8ea6c8", "#dfe9f8"][Math.floor(Math.random()*3)] });
 }
 
 /* ---------- 소용돌이 피날레 (블랙홀) ---------- */
@@ -1526,6 +1555,21 @@ function ashenSprite(t) {
   }
   return sp.ashen;
 }
+// 냉각 연출용: 색을 잃고 식어 어두워진 스프라이트 (한 번만 만들어 둠)
+function coldSprite(t) {
+  const sp = sprite(t);
+  if (!sp.cold) {
+    const c = document.createElement("canvas"); c.width = c.height = sp.S;
+    const g = c.getContext("2d");
+    g.filter = "grayscale(1) brightness(0.3) contrast(1.15)";
+    g.drawImage(sp.base, 0, 0); g.drawImage(sp.light, 0, 0);
+    g.filter = "none";
+    g.globalCompositeOperation = "source-atop";                      // 남은 빛에 차가운 푸른 기운을 입힌다
+    g.fillStyle = "rgba(38,58,96,0.5)"; g.fillRect(0, 0, sp.S, sp.S);
+    sp.cold = c;
+  }
+  return sp.cold;
+}
 // 소멸 연출용: 통째로 하얗게 달아오른 스프라이트 (매 프레임 필터는 너무 느려서 한 번만 만들어 둠)
 function whiteSprite(t) {
   const sp = sprite(t);
@@ -1629,6 +1673,7 @@ function drawBody(b) {
   const sk = b.suck ? Math.min(1, b.suck.p) : null, col = b.collapse == null ? null : Math.min(1, b.collapse);
   const du = b.dust == null ? null : Math.min(1, b.dust);
   const go = b.gone == null ? null : Math.min(1, b.gone);
+  const cl = b.cool == null ? null : Math.min(1, b.cool);
   let s = 1;
   if (b.pop) { b.pop = Math.max(0, b.pop - 0.08); s = 1 + Math.sin(b.pop*Math.PI) * 0.28; }
   if (k != null) s *= 1 + 0.14*Math.sin(Math.min(1, k)*Math.PI) - 0.3*k;   // 번개에 맞아 부풀었다가 오그라듦
@@ -1677,7 +1722,13 @@ function drawBody(b) {
       ctx.drawImage(whiteSprite(t), -h, -h);
       ctx.globalAlpha = 1; ctx.restore(); ctx.restore(); return;
     }
-    if (ash == null) ctx.drawImage(sp.base, -h, -h);
+    if (cl != null) {                                                                    // 색을 잃고 식어 가는 중 (열적 죽음)
+      const out = Math.max(0, cl - 0.72) / 0.28;                                         // 마지막 28% 구간에서 완전히 꺼진다
+      ctx.globalAlpha = (1 - Math.min(1, cl*1.25)) * (1 - out); ctx.drawImage(sp.base, -h, -h);
+      ctx.globalAlpha = Math.min(1, cl*1.25) * (1 - out);        ctx.drawImage(coldSprite(t), -h, -h);
+      ctx.globalAlpha = 1;
+    }
+    else if (ash == null) ctx.drawImage(sp.base, -h, -h);
     else {                                                                               // 화산재에 덮여 회색으로 굳는 중
       ctx.globalAlpha = 1 - ash; ctx.drawImage(sp.base, -h, -h);
       ctx.globalAlpha = ash;     ctx.drawImage(ashenSprite(t), -h, -h);
@@ -1685,7 +1736,8 @@ function drawBody(b) {
     }
     if (b.crack != null && b.crack < 3) ctx.drawImage(shellSprite(t, b.crack, b.shellVar), -h, -h);   // 왁뿌볼: 아직 덮여 있는 왁스막
     ctx.restore();
-    if (ash != null) ctx.globalAlpha = 1 - ash;
+    if (cl != null) ctx.globalAlpha = (1 - cl) * (1 - Math.max(0, cl - 0.72) / 0.28);     // 식으면서 빛부터 먼저 잦아든다
+    else if (ash != null) ctx.globalAlpha = 1 - ash;
     else if (sl != null) ctx.globalAlpha = 1 - sl*sl;
     else if (hw != null) ctx.globalAlpha = 1 - Math.pow(Math.max(0, hw - 0.35) / 0.65, 2);
     else if (sk != null) ctx.globalAlpha = 1 - sk*sk;
@@ -1885,6 +1937,11 @@ function loop(now) {
           k.ang = k.a0 + k.spin * e2;
           b.x = k.hole.x + Math.cos(k.ang) * rr; b.y = k.hole.y + Math.sin(k.ang) * rr;
           if (p >= 1) { swallowed(b); b.dead = true; gone = true; }
+        }
+        if (b.cool != null && b.cool < 1) {                      // 식어서 꺼지는 중 (열적 죽음)
+          b.cool = Math.min(1, b.cool + frame * 0.42);
+          if (b.cool > 0.55 && Math.random() < 0.22) lastPhoton(b);
+          if (b.cool >= 1) { b.dead = true; gone = true; }
         }
         if (b.gone != null) {                                    // 빛으로 분해되는 중
           b.gone += frame * 1.5;

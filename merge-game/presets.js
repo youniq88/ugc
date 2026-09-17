@@ -70,6 +70,11 @@ const KITS = {
   universe: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
   ],
+  // 우주의 마지막 날 프리셋 전용: 사진풍 천체 7종 (AI 렌더링, 512px 투명 PNG, 같은 CDN).
+  // 검은 왜성과 열적 죽음은 거의 빛이 없어서 이미지로는 형체가 안 잡히므로 코드로 그립니다.
+  heatdeath: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
 };
 const PRESETS = {
   planets: {   // 9단계: 초승달 → 그믐달 → 보름달 → 지구 → 토성 → 태양 → 혜성 → 빛나는 별 → 블랙홀
@@ -187,6 +192,22 @@ const PRESETS = {
       { r:134, img:"145680e8-7138-47f8-8d64-272df2b00f43.png", glow:"#ffd9a0", scale:1.06 },   // 라니아케아 초은하단 5억 2,000만 광년
       { r:160, img:"290c964d-994c-414c-a629-90a3165a651d.png", glow:"#8f9dff", scale:1.06 },   // 관측 가능한 우주 930억 광년
       { r:190, drawR:380, img:"7e7ed043-8e64-4e45-9ae2-32d40ddba0b9.png", frames:["7e7ed043-8e64-4e45-9ae2-32d40ddba0b9.png","2449d29f-9729-4f4c-a63a-66b70fd73c74.png","f4ccabb7-dc28-4263-9387-ab31528d8d4f.png"], glow:"#ffcf3d", scale:1.10, noSpin:true },   // 여섯 보석이 박힌 황금 건틀릿 (충돌은 190, 그림은 두 배 크게. frames = 손가락을 튕기는 장면)
+    ],
+  },
+  heatdeath: { // 9단계 우주의 마지막 날: 별 탄생 → 붉은 거성 → 백색왜성 → 은하 충돌 → 마지막 별 → 검은 왜성 → 블랙홀의 시대 → 호킹 증발 → 열적 죽음
+    // 시간 순서입니다. 지금 새 별에 불이 켜지는 데서 시작해, 10^100 년 뒤 아무 일도 일어나지 않는 텅 빈 공간에서 끝납니다.
+    // 뒤로 갈수록 크기는 커지지만 빛은 계속 줄어듭니다 (마지막 두 단계는 거의 검은 구).
+    kit: "heatdeath", sound: "nova", finale: "cool",   // 열적 죽음이 나오면 남은 것이 하나씩 식어 꺼지고 화면이 완전히 검게 닫힘
+    items: [
+      { r:36,  img:"280f6e36-715d-4982-b08d-ff36e22ef4fb.png", glow:"#b06bff", scale:1.06 },   // 별 탄생 (성운 속에서 새 별에 불이 켜짐)
+      { r:46,  img:"a9110580-030e-4823-b82d-588f7a1b2d1b.png", glow:"#ff4a1f", scale:1.04 },   // 붉은 거성 (50억 년 뒤, 부풀어 오른 태양이 지구를 삼킴)
+      { r:57,  img:"28981d6e-65d3-4f68-ad54-35465a8f4c16.png", glow:"#9fe4ff", scale:1.06 },   // 백색왜성 (태양이 남긴 뜨거운 재)
+      { r:71,  img:"1ce0c637-ddb4-414b-9ac0-c86ed4a7d59c.png", glow:"#8aa0ff", scale:1.08 },   // 은하 충돌 (우리은하와 안드로메다가 뒤엉킴)
+      { r:88,  img:"e7e020fd-249f-4b1d-b675-60498b45967c.png", glow:"#ff5533", scale:1.04 },   // 마지막 별 (100조 년 뒤, 우주의 마지막 별이 꺼짐)
+      { r:108, shape:"blackdwarf", glow:"#5a2016", noSpin:true },                              // 검은 왜성 (다 식어 빛을 잃은 별의 시체)
+      { r:132, img:"82b74bf6-3ca5-4fdd-ad61-7e858b913ccc.png", glow:"#ff9a3d", scale:1.04 },   // 블랙홀의 시대 (빛나는 것은 없고 블랙홀만 남음)
+      { r:160, img:"057749b1-e730-4110-a691-93e519cf6a3e.png", glow:"#bfe4ff", scale:1.06 },   // 호킹 증발 (블랙홀이 스스로 증발하며 내는 마지막 빛)
+      { r:195, shape:"voidend", glow:"#20304a", noSpin:true },                                 // 열적 죽음 (아무 일도 일어나지 않는 텅 빈 공간)
     ],
   },
   wakppu: {   // 왁뿌볼 9단계: 흰 왁스막을 씌운 과일 젤리. 네 번 부딪혀야 합쳐지고, 마지막은 거대 두리안
@@ -437,6 +458,50 @@ const SHAPES = {
       g.fillStyle = "rgba(255,120,0,0.35)"; blob(g, -r*0.3, r*0.2, r*0.35, r*0.2, 0.5); blob(g, r*0.35, -r*0.25, r*0.25, r*0.18, -0.3); blob(g, r*0.1, r*0.5, r*0.2, r*0.1);
       const core = g.createRadialGradient(-r*0.2, -r*0.2, 0, 0, 0, r); core.addColorStop(0, "rgba(255,255,230,0.9)"); core.addColorStop(0.5, "rgba(255,230,120,0)"); g.fillStyle = core; g.fillRect(-r, -r, 2*r, 2*r);
     } });
+  },
+  blackdwarf(g, r) {                              // 검은 왜성: 다 식어 빛을 잃은 별의 시체. 식으면서 갈라진 껍질과 아주 옅은 붉은 잔열만 남음
+    if (!LIGHT_PASS) {
+      const base = g.createRadialGradient(-r*0.3, -r*0.34, r*0.05, 0, 0, r);
+      base.addColorStop(0, "#3a2a26"); base.addColorStop(0.45, "#221a18"); base.addColorStop(1, "#0a0707");
+      g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fillStyle = base; g.fill();
+      g.save(); g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.clip();
+      g.lineCap = "round";
+      for (let i = 0; i < 14; i++) {                // 식으면서 갈라진 틈: 바닥에 아직 아주 옅은 잔열이 비침
+        const a = i * 2.39996, rr = r * (0.12 + ((i * 0.37) % 1) * 0.8);
+        const x = Math.cos(a) * rr, y = Math.sin(a) * rr, len = r * (0.18 + ((i * 0.61) % 1) * 0.42), dir = a * 1.7;
+        g.beginPath(); g.moveTo(x, y);
+        g.lineTo(x + Math.cos(dir)*len, y + Math.sin(dir)*len);
+        g.strokeStyle = `rgba(${120 + i*4},${34 + i*2},18,${0.1 + (i % 4)*0.045})`;
+        g.lineWidth = Math.max(1, r*0.018); g.stroke();
+      }
+      for (let i = 0; i < 9; i++) {                 // 굳은 표면의 얼룩
+        const a = i * 1.7, rr = r * (0.2 + ((i * 0.53) % 1) * 0.68);
+        g.beginPath(); g.arc(Math.cos(a)*rr, Math.sin(a)*rr, r * (0.06 + ((i * 0.29) % 1) * 0.13), 0, Math.PI*2);
+        g.fillStyle = `rgba(0,0,0,${0.16 + (i % 3)*0.07})`; g.fill();
+      }
+      g.restore();
+      return;
+    }
+    const rim = g.createRadialGradient(0, 0, r*0.82, 0, 0, r);    // 형체가 보이도록 아주 약한 붉은 림 라이트만
+    rim.addColorStop(0, "rgba(0,0,0,0)"); rim.addColorStop(0.86, "rgba(120,36,20,0.1)"); rim.addColorStop(1, "rgba(176,58,30,0.5)");
+    g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fillStyle = rim; g.fill();
+    const sh = g.createRadialGradient(-r*0.3, -r*0.3, r*0.35, 0, 0, r*1.02);
+    sh.addColorStop(0, "rgba(0,0,0,0)"); sh.addColorStop(1, "rgba(0,0,0,0.5)");
+    g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fillStyle = sh; g.fill();
+  },
+  voidend(g, r) {                                 // 열적 죽음: 아무 일도 일어나지 않는 텅 빈 공간. 거의 검지만 테두리로 형체는 읽힘
+    if (!LIGHT_PASS) {
+      const base = g.createRadialGradient(0, 0, 0, 0, 0, r);
+      base.addColorStop(0, "#080b12"); base.addColorStop(0.7, "#04060a"); base.addColorStop(1, "#000000");
+      g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fillStyle = base; g.fill();
+      return;
+    }
+    const rim = g.createRadialGradient(0, 0, r*0.78, 0, 0, r);    // 차가운 회청색 테두리
+    rim.addColorStop(0, "rgba(0,0,0,0)"); rim.addColorStop(0.8, "rgba(60,84,124,0.07)"); rim.addColorStop(0.97, "rgba(120,152,200,0.34)"); rim.addColorStop(1, "rgba(150,180,225,0.12)");
+    g.beginPath(); g.arc(0, 0, r, 0, Math.PI*2); g.fillStyle = rim; g.fill();
+    const last = g.createRadialGradient(0, 0, 0, 0, 0, r*0.16);   // 한가운데 마지막 남은 빛 한 점
+    last.addColorStop(0, "rgba(226,238,255,0.9)"); last.addColorStop(0.16, "rgba(160,190,235,0.3)"); last.addColorStop(1, "rgba(120,160,220,0)");
+    g.beginPath(); g.arc(0, 0, r*0.16, 0, Math.PI*2); g.fillStyle = last; g.fill();
   },
   blackhole(g, r) {                               // 인터스텔라(가르강튀아) 스타일: 검은 구 + 구를 감싸는 광환(렌즈된 원반) + 가로 강착 원반
     if (LIGHT_PASS) return;
