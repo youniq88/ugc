@@ -70,6 +70,7 @@ const SETTINGS = {
   maxTierVanish: true,   // 마지막 단계끼리 합치면 사라지게 (false면 그대로 유지)
   gravity: 2600,         // 중력 (px/s²) - UI "중력" 슬라이더나 URL ?gravity= 로 바꿀 수 있음
   restitution: 0.55,     // 튕김 정도 (0~1) - 벽·요소끼리 통통 튀는 정도 (UI 탄성 슬라이더나 URL ?bounce= 로 바꿀 수 있음)
+  overBlockMs: 1600,     // 한 공이 관 입구를 이만큼 계속 막고 있으면 넘친 것으로 본다
   gameOverHoldMs: 2500,  // 넘쳤을 때 몇 ms 뒤에 자동 재시작
   showScore: true,
   showLegend: false,     // 하단 진행표(단계 나열) 표시 - 기본 숨김
@@ -1917,8 +1918,15 @@ function loop(now) {
     } else if (!overSince) {
       if (gt - lastDrop > dropIntervalMs()) drop();
       while (acc >= FIXED) { step(FIXED); acc -= FIXED; }
-      const transitMs = (Math.max(...TUBES.map(t => t.back)) + 200) / tubeSpeed() * 1000;
-      const stuck = bodies.some(b => blocksTube(b) && gt - b.born > transitMs + 900);
+      // 게임오버: 관 입구를 "계속" 막고 있는 공이 생겼을 때. 막고 있는 시간은 공마다 따로 잽니다.
+      // 예전에는 태어난 지 오래됐는지(gt - b.born)만 봤는데, 그러면 아래에서 합쳐지며 밀려 올라왔거나
+      // 튕겨 올라온 오래된 공이 입구를 스치는 순간 바로 끝나 버렸습니다. 통이 비어 있어도 끝나던 원인입니다.
+      let stuck = false;
+      for (const b of bodies) {
+        if (b.inTube || !blocksTube(b)) { b.blockSince = 0; continue; }   // 관을 타고 내려오는 중이면 막은 게 아님
+        if (!b.blockSince) b.blockSince = gt;
+        else if (gt - b.blockSince > SETTINGS.overBlockMs) { stuck = true; break; }
+      }
       if (stuck) { overSince = gt; shake = 20; }
     } else if (gt - overSince > SETTINGS.gameOverHoldMs) reset();
     if (fxQueue.length) {                                        // 예약해 둔 피날레 연출
