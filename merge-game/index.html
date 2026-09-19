@@ -55,7 +55,7 @@
   <button id="btnClose">닫기</button>
 </div>
 <div id="audioHint">🔈 화면을 한 번 탭하면 소리가 켜집니다</div>
-<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화(시작 시 UI 자동 숨김) · Enter: 다시 시작 · 모드: UI 왼쪽 위에서 프레스 게임으로 바꿀 수 있습니다 · URL ?preset=이름 &bounce=0.7 &speed=950 &rate=40 &gravity=2600 &tubes=2 &size=0.7 &ui=0</div>
+<div id="hint">스페이스/P: 일시정지 · H: UI 숨기기/보이기 · R: 녹화(시작 시 UI 자동 숨김) · Enter: 다시 시작 · 모드: UI 왼쪽 위에서 프레스 게임으로 바꿀 수 있습니다 · URL ?preset=이름 &bounce=0.7 &speed=950 &rate=40 &drop=3 &gravity=2600 &tubes=2 &size=0.7 &ui=0</div>
 
 <script src="presets.js"></script>
 <script>
@@ -89,7 +89,7 @@ canvas.width = W; canvas.height = H;
 
 // 용기 기하: 원형 그릇 + 위쪽 관
 const BOWL = { cx: W/2, cy: 1130, R: 490 };
-let bgCanvas = null, containerCanvas = null;   // 배경·테두리는 한 번만 그려 두고 재사용 (관 개수가 바뀌면 버림)
+let bgCanvas = null, containerCanvas = null, frameCanvas = null;   // 배경·테두리는 한 번만 그려 두고 재사용 (관 개수가 바뀌면 버림)
 const TUBE = { half: 85, top: 0 };
 // 관은 1~3개. 가운데 관은 수직, 양옆 관은 사선으로 내려오며 전부 그릇 한가운데를 겨눕니다.
 // 겨눈 방향으로 쏘아 준 뒤 중력이 당기므로, 양옆에서 들어온 줄기는 포물선을 그리며 가운데에서 만납니다.
@@ -110,7 +110,7 @@ function layoutTubes() {
     return { a, dx, dy, nx, ny, mx, my, back };
   }).sort((t1, t2) => t1.mx - t2.mx);                       // 왼쪽 관부터
   BOWL.neckY = Math.min(...TUBES.map(t => t.my));
-  bgCanvas = null; containerCanvas = null;                  // 용기 모양이 바뀌었으니 미리 그려 둔 그림을 버림
+  bgCanvas = null; containerCanvas = null; frameCanvas = null;   // 용기 모양이 바뀌었으니 미리 그려 둔 그림을 버림
 }
 function tubeU(t, b) { return (b.x - t.mx)*t.dx + (b.y - t.my)*t.dy; }   // 관 축 방향 (음수 = 아직 관 안)
 function tubeS(t, b) { return (b.x - t.mx)*t.nx + (b.y - t.my)*t.ny; }   // 관 가운데선에서 옆으로 벗어난 양
@@ -128,6 +128,14 @@ layoutTubes();
 const params = new URLSearchParams(location.search);
 let presetName = params.get("preset") in PRESETS ? params.get("preset") : SETTINGS.preset;
 let TIERS = PRESETS[presetName].items;
+// spinMaxTier: 이 단계까지만 물리 회전을 그림에 반영한다. 큰 공은 회전시키면 그리기 비용이 급격히 뛰는데
+// (스프라이트가 넓어서 매 프레임 다시 샘플링됨) 은하·바다·태풍처럼 큰 것들은 도는 게 오히려 어색해서 세운다
+function applySpinLimit() {
+  const m = PRESETS[presetName].spinMaxTier;
+  if (m == null) return;
+  TIERS.forEach((t, i) => { if (i > m) t.noSpin = true; });
+}
+applySpinLimit();
 let sizeOverride = null;                 // 요소 크기 배율 (모든 단계의 반지름에 같은 값을 곱한다)
 function sizeScale() { return sizeOverride ?? 1; }
 // 프리셋이 정한 단계별 반지름에 같은 배율을 곱합니다. 프레스 모드의 공 크기 조절과 같은 자리입니다.
@@ -145,6 +153,45 @@ function applySize() {
 }
 
 let bodies = [], particles = [], popups = [], rings = [], confetti = [], bolts = [], fxQueue = [], drifts = [], arrows = [];
+/* ---------- 파티클 풀과 상한 ----------
+   짧은 영상에서 프레임이 튀지 않게 두 가지를 지킵니다.
+   1) 동시에 살아 있는 파티클 수를 묶어 둡니다. 평상시 200개, 피날레 중에는 400개.
+      상한에 닿으면 새로 만들지 않고 가장 오래된 것을 그 자리에서 다시 씁니다.
+   2) 매 프레임 새 객체를 만들지 않습니다. 죽은 파티클은 풀에 돌려놓고 다시 꺼내 씁니다.
+      배열을 걸러낼 때도 filter 로 새 배열을 만들지 않고 제자리에서 앞으로 당깁니다.  */
+const PARTICLE_CAP = 200, PARTICLE_CAP_FINALE = 400;
+const particlePool = [];
+function particleCap() { return (ended || finaleBusy) ? PARTICLE_CAP_FINALE : PARTICLE_CAP; }
+// 인자를 하나씩 받습니다. 객체 리터럴로 넘기면 호출할 때마다 새 객체가 생기기 때문입니다.
+function addParticle(x, y, vx, vy, life, color, size, spin, spinV, decay, chip, free) {
+  let p;
+  if (particles.length >= particleCap()) p = particles.shift();      // 가장 오래된 것을 재활용
+  else p = particlePool.pop() || { x:0, y:0, vx:0, vy:0, life:0, color:"#fff", size:0, spin:0, spinV:0, decay:0, chip:null, free:false };
+  p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.life = life; p.color = color;
+  p.size = size || 0; p.spin = spin || 0;
+  p.spinV = spinV; p.decay = decay;                                  // undefined 면 기본값이 쓰입니다
+  p.chip = chip == null ? null : chip; p.free = !!free;
+  particles.push(p);
+  return p;
+}
+// 조건을 만족하는 것만 앞으로 당겨 남깁니다 (새 배열을 만들지 않음). 버려지는 파티클은 풀로 돌아갑니다.
+function compact(arr, keep, pool) {
+  let w = 0;
+  for (let i = 0; i < arr.length; i++) {
+    const v = arr[i];
+    if (keep(v)) { arr[w++] = v; }
+    else if (pool && pool.length < 600) pool.push(v);
+  }
+  arr.length = w;
+}
+// 이 배열들도 눈에 보이는 알갱이라 같은 상한을 씁니다. 넘치면 가장 오래된 것을 버립니다.
+function capPush(arr, v, cap) { if (arr.length >= cap) arr.shift(); arr.push(v); }
+// compact 에 넘기는 조건 함수. 매 프레임 새로 만들지 않도록 한 번만 정의해 둡니다.
+const keepAlive = v => v.life > 0;
+const keepT = v => v.t < 1;
+const keepBolt = bt => bt.t < 1;
+const keepDrift = d => d.life > 0 && d.y < H + 80 && d.y > -120;
+const keepConfetti = c => c.life > 0 && c.y < H + 40;
 let ended = false, endedAt = 0;          // 마지막 단계 도달 후 정지 상태
 let finaleBusy = false;                  // 피날레 진행 중 (이때는 더 이상 합체하지 않음)
 let meteor = null;                       // 떨어지는 운석 (공룡 피날레)
@@ -196,20 +243,24 @@ function loadImages() {
     if (t.frames) { t._frameKeys = []; t.frames.forEach((f, i) => load(t, kitUrls(f), k => { t._frameKeys[i] = k; })); }
   }
   return Promise.race([Promise.all(jobs), new Promise(r => setTimeout(r, 6000))])
-    .then(() => { if (PRESETS[presetName].shell) bakeShells(); });   // 왁뿌볼 껍질은 미리 구워 둔다
+    .then(() => { if (PRESETS[presetName].shell) bakeShells(); bakeSprites(); });   // 왁뿌볼 껍질과 단계 그림은 미리 구워 둔다
+// 단계 그림도 처음 만들 때 비싸다(한 장에 1ms 안팎). 경기 중 새 단계가 처음 나올 때 끊기지 않도록 시작할 때 전부 만들어 둔다
+function bakeSprites() { for (const t of TIERS) { t._sprite = null; sprite(t); } }
 }
 // 껍질 그림은 처음 만들 때 비싸다. 시작할 때 전부 만들어 두면 경기 중에 끊기지 않는다
 function bakeShells() {
   for (const t of TIERS) for (let st = 0; st <= 2; st++) for (let v = 0; v < 2; v++) shellSprite(t, st, v);
 }
 function reset() {
-  bodies = []; particles = []; popups = []; rings = []; confetti = []; bolts = []; fxQueue = []; drifts = []; score = 0; overSince = 0; flash = 0; ended = false;
+  for (const p of particles) if (particlePool.length < 600) particlePool.push(p);   // 쓰던 파티클은 풀로 돌려놓고 다시 씁니다
+  bodies = []; particles.length = 0; popups.length = 0; rings.length = 0; confetti.length = 0; bolts.length = 0; fxQueue = []; drifts.length = 0; score = 0; overSince = 0; flash = 0; ended = false;
   finaleBusy = false; meteor = null; ashFall = false; ashDim = 0; ashDimTo = 0; arrows = [];
   moon = null; nightDim = 0; nightDimTo = 0; voidDim = 0; voidDimTo = 0; whiteDim = 0; whiteDimTo = 0; whiteFall = 1.2; physicsHoldMs = 3000;
+  tideNow = 0;
   nextTier = randTier(); lastDrop = gt; melodyIdx = 0;   // 멜로디도 처음부터
 }
 // 떨어뜨릴 단계 수: 프리셋이 dropTiers 를 갖고 있으면 그걸 먼저 쓴다 (왁뿌볼은 5)
-function dropTiers() { return PRESETS[presetName].dropTiers ?? SETTINGS.dropTiers; }
+function dropTiers() { return dropOverride ?? PRESETS[presetName].dropTiers ?? SETTINGS.dropTiers; }
 function randTier() {
   // 관(TUBE)을 통과할 수 있는 크기의 단계만 떨어뜨림
   let n = Math.min(dropTiers(), TIERS.length);
@@ -222,7 +273,7 @@ function spawn(tier, x, y, vx=0, vy=0, inTube=false) {
   bodies.push(b);
 }
 // 낙하 속도 / 분당 발사 수 / 중력: UI 슬라이더와 URL 로 바꿀 수 있음 (null이면 SETTINGS 기본값)
-let speedOverride = null, rateOverride = null, gravOverride = null;
+let speedOverride = null, rateOverride = null, gravOverride = null, dropOverride = null;
 function tubeSpeed() { return speedOverride ?? SETTINGS.tubeSpeed; }
 function gravity() { return gravOverride ?? SETTINGS.gravity; }
 // 관 안에서 앞뒤가 겹치지 않는 최대 발사 수. 슬라이더를 더 올려도 여기서 막힘
@@ -802,11 +853,49 @@ function bounce() { return bounceOverride ?? presetBounce(); }
 { const b = parseFloat(params.get("bounce")); if (!isNaN(b)) bounceOverride = Math.min(1, Math.max(0, b)); }
 { const v = parseFloat(params.get("speed"));   if (!isNaN(v)) speedOverride = Math.min(2000, Math.max(200, v)); }
 { const v = parseFloat(params.get("rate"));    if (!isNaN(v)) rateOverride  = Math.min(1000, Math.max(10, v)); }
+{ const v = parseInt(params.get("drop"), 10); if (!isNaN(v)) dropOverride = Math.min(9, Math.max(1, v)); }   // 떨어뜨릴 단계 수 (조율용)
 { const v = parseFloat(params.get("gravity")); if (!isNaN(v)) gravOverride  = Math.min(8000, Math.max(400, v)); }
 { const v = parseInt(params.get("tubes"), 10); if (!isNaN(v)) { tubeCountOverride = Math.min(3, Math.max(1, v)); layoutTubes(); } }
 { const v = parseFloat(params.get("size"));    if (!isNaN(v)) sizeOverride   = Math.min(1.5, Math.max(0.4, v)); }
+/* ---------- 블랙홀 중력 (우주의 종말 프리셋) ----------
+   프리셋이 blackhole 로 지정한 단계의 공이, 반경 안에 있는 "자기보다 낮은 단계" 공만 약하게 끌어당깁니다.
+   가속도만 더할 뿐이라 매 프레임 새 객체를 만들지 않고, 반경과 힘을 묶어 두어 프레임이 흔들리지 않습니다.
+   같은 단계끼리는 건드리지 않습니다. 끌어당김이 합체 판정을 대신해 버리면 게임이 망가지기 때문입니다.  */
+const PULL_RADIUS = 2.6;      // 블랙홀 반지름의 몇 배까지 미치는지
+const PULL_ACCEL  = 900;      // 가장 가까울 때의 가속도 (px/s^2). 중력 기본값의 1/3 수준
+const PULL_MIN_GAP = 3;       // 블랙홀보다 이만큼 아래 단계만 건드린다. 합쳐질 짝까지 빼앗으면 판이 막힌다
+const EAT_R = 0.8;            // 반지름의 이 배 안으로 들어오면 삼킨다 (사건의 지평선)
+function pullBlackholes(dt) {
+  const tier = PRESETS[presetName].blackhole;
+  if (tier == null) return;
+  const maxTier = tier - PULL_MIN_GAP;
+  for (let i = 0; i < bodies.length; i++) {
+    const h = bodies[i];
+    if (h.tier !== tier || h.inTube || h.dead || h.suck || h.pin) continue;
+    const R = h.r * PULL_RADIUS, R2 = R * R, eat2 = (h.r*EAT_R)*(h.r*EAT_R);
+    for (let j = 0; j < bodies.length; j++) {
+      const o = bodies[j];
+      if (o === h || o.tier > maxTier || o.inTube || o.dead || o.suck || o.pin) continue;
+      const dx = h.x - o.x, dy = h.y - o.y, d2 = dx*dx + dy*dy;
+      if (d2 > R2 || d2 < 1) continue;
+      if (d2 < eat2) { swallow(h, o); continue; }    // 지평선을 넘었다: 나선을 그리며 빨려 들어간다
+      const d = Math.sqrt(d2);
+      const f = PULL_ACCEL * (1 - d / R) * dt;       // 가까울수록 세게, 경계에서는 0
+      o.vx += (dx / d) * f; o.vy += (dy / d) * f;
+    }
+  }
+}
+// 빨려 들어가는 연출은 피날레에서 쓰는 나선 흡입을 그대로 씁니다. 공 하나에 객체 하나를 한 번만 붙이므로
+// 매 프레임 새로 만드는 것이 없고, 이후 위치 계산과 소멸 처리는 기존 루프가 맡습니다.
+function swallow(h, o) {
+  const dx = o.x - h.x, dy = o.y - h.y, a = Math.atan2(dy, dx);
+  o.suck = { hole: h, r0: Math.hypot(dx, dy), a0: a, ang: a, p: 0, dur: 0.42,
+             spin: (Math.random() < 0.5 ? -1 : 1) * 2.4 };
+  score += (o.tier + 1) * 8;
+}
 function step(dt) {
   const g = gravity(), ph = presetPhysics(), e = bounce(), wob = ph.wobble || 0;
+  if (!finaleBusy) pullBlackholes(dt);
   for (const b of bodies) {
     if (b.suck || b.collapse != null || b.pin) continue;   // 피날레가 직접 위치를 잡는 중: 물리 건너뜀
     if (b.inTube) {
@@ -932,7 +1021,7 @@ function finale(x, y, color) {
   for (let i = 0; i < 3; i++) rings.push({ x, y, r0: 120 + i*60, color: palette[i], t: -i*0.18 });
   for (let i = 0; i < 70; i++) {
     const ang = Math.random()*Math.PI*2, sp = 400 + Math.random()*900;
-    particles.push({ x, y, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, life: 1.4, color: palette[i % palette.length], size: 5 + Math.random()*9, spin: Math.random()*Math.PI });
+    addParticle(x, y, Math.cos(ang)*sp, Math.sin(ang)*sp, 1.4, palette[i % palette.length], 5 + Math.random()*9, Math.random()*Math.PI);
   }
   finalePalette = palette;
   const kind = finaleKind();
@@ -982,9 +1071,8 @@ function durianFinale(x, y, palette) {
     confettiBurst(king.x, king.y, palette);
     for (let i = 0; i < 110; i++) {                                // 사방으로 터져 나가는 왁스 조각 (그릇 밖까지 날아가도록 free)
       const a = Math.random()*Math.PI*2, sp = 500 + Math.random()*1500;
-      particles.push({ x: king.x, y: king.y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 1.6,
-                       color: "#fffdf4", size: 3 + Math.random()*9, spin: Math.random()*Math.PI,
-                       spinV: (Math.random()-.5)*30, decay: 1.1, chip: (Math.random()*4)|0, free: true });
+      addParticle(king.x, king.y, Math.cos(a)*sp, Math.sin(a)*sp, 1.6, "#fffdf4", 3 + Math.random()*9,
+                  Math.random()*Math.PI, (Math.random()-.5)*30, 1.1, (Math.random()*4)|0, true);
     }
     for (const b of bodies) {                                      // 나머지 껍질도 한꺼번에 깨져 바깥으로 밀려남
       if (b === king) continue;
@@ -1049,10 +1137,10 @@ function ignite(b) {
 }
 function ember(b) {                                                  // 불똥: 위로 솟았다가 중력에 떨어짐
   const a = Math.random()*Math.PI*2, r = b.r * (0.25 + Math.random()*0.75);
-  particles.push({ x: b.x + Math.cos(a)*r, y: b.y + Math.sin(a)*r,
-    vx: (Math.random()-.5)*200, vy: -140 - Math.random()*420, life: 0.45 + Math.random()*0.5,
-    color: ["#ffe08a", "#ff9a1f", "#ff3b1f", "#ffffff"][Math.floor(Math.random()*4)],
-    size: 3 + Math.random()*6, spin: Math.random()*Math.PI });
+  addParticle(b.x + Math.cos(a)*r, b.y + Math.sin(a)*r,
+    (Math.random()-.5)*200, -140 - Math.random()*420, 0.45 + Math.random()*0.5,
+    ["#ffe08a", "#ff9a1f", "#ff3b1f", "#ffffff"][Math.floor(Math.random()*4)],
+    3 + Math.random()*6, Math.random()*Math.PI);
 }
 /* ---------- 화살 피날레 (오디세우스) ---------- */
 // 오디세우스가 활시위를 당겼다가 화살 한 발을 쏘고, 그 화살이 가까운 것부터 차례로 남은 요소를 전부 꿰뚫고 지나갑니다.
@@ -1086,8 +1174,7 @@ function arrowHit(a) {                                              // 화살이
   rings.push({ x: b.x, y: b.y, r0: b.r*0.7, color: "#ffd24a", t: 0 });
   for (let k = 0; k < 12; k++) {                                     // 황금빛 불꽃
     const ang = Math.random()*Math.PI*2, sp = 200 + Math.random()*500;
-    particles.push({ x: b.x, y: b.y, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, life: 0.6,
-      color: ["#ffffff", "#ffd24a", "#ff8a3a"][k % 3], size: 3 + Math.random()*6, spin: Math.random()*Math.PI });
+    addParticle(b.x, b.y, Math.cos(ang)*sp, Math.sin(ang)*sp, 0.6, ["#ffffff", "#ffd24a", "#ff8a3a"][k % 3], 3 + Math.random()*6, Math.random()*Math.PI);
   }
   shoot(b.x, b.y, a.path, a.i + 1, a.palette, a.hero);
 }
@@ -1225,8 +1312,7 @@ function swallowed(b) {                                            // 사건의 
   rings.push({ x: h.x, y: h.y, r0: h.r*0.5, color: "#ffd9a0", t: 0 });
   for (let i = 0; i < 8; i++) {                                    // 강착원반으로 흩어지는 잔해
     const ang = b.suck.ang + (Math.random()-.5)*1.2, sp = 160 + Math.random()*420;
-    particles.push({ x: b.x, y: b.y, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, life: 0.45,
-      color: ["#ffffff", "#ffd9a0", "#ff9a3d"][i % 3], size: 2 + Math.random()*5, spin: Math.random()*Math.PI });
+    addParticle(b.x, b.y, Math.cos(ang)*sp, Math.sin(ang)*sp, 0.45, ["#ffffff", "#ffd9a0", "#ff9a3d"][i % 3], 2 + Math.random()*5, Math.random()*Math.PI);
   }
 }
 
@@ -1291,8 +1377,7 @@ function meteorImpact(mx, my) {
   for (let i = 0; i < 4; i++) rings.push({ x: mx, y: my, r0: 100 + i*80, color: ["#fff3c4", "#ffb347", "#ff6a1f", "#ffffff"][i], t: -i*0.14 });
   for (let i = 0; i < 90; i++) {                                    // 충돌 파편
     const ang = -Math.PI/2 + (Math.random()-.5)*2.6, sp = 500 + Math.random()*1400;
-    particles.push({ x: mx, y: my, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, life: 1.2,
-      color: ["#fff3c4", "#ffb347", "#ff6a1f", "#7a4a2a"][i % 4], size: 4 + Math.random()*10, spin: Math.random()*Math.PI });
+    addParticle(mx, my, Math.cos(ang)*sp, Math.sin(ang)*sp, 1.2, ["#fff3c4", "#ffb347", "#ff6a1f", "#7a4a2a"][i % 4], 4 + Math.random()*10, Math.random()*Math.PI);
   }
   const targets = bodies.filter(b => b.burn == null)
     .sort((a, b) => Math.hypot(a.x-mx, a.y-my) - Math.hypot(b.x-mx, b.y-my));
@@ -1358,8 +1443,7 @@ function implodePop(b) {                                             // 찌그�
   rings.push({ x: b.x, y: b.y, r0: b.r*0.8, color: "#bfe9ff", t: 0 });
   for (let i = 0; i < 14; i++) {
     const ang = Math.random()*Math.PI*2, sp = 260 + Math.random()*560;
-    particles.push({ x: b.x, y: b.y, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, life: 0.7,
-      color: ["#ffffff", "#bfe9ff", "#7fd3ff"][i % 3], size: 3 + Math.random()*6, spin: Math.random()*Math.PI });
+    addParticle(b.x, b.y, Math.cos(ang)*sp, Math.sin(ang)*sp, 0.7, ["#ffffff", "#bfe9ff", "#7fd3ff"][i % 3], 3 + Math.random()*6, Math.random()*Math.PI);
   }
   for (let i = 0; i < 10; i++) bubble(b.x, b.y);
 }
@@ -1373,7 +1457,7 @@ function burst(x, y, color, r) {
   const n = 14 + Math.floor(r/6);
   for (let i = 0; i < n; i++) {
     const ang = Math.random()*Math.PI*2, sp = 200 + Math.random()*520;
-    particles.push({ x, y, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, life: 1, color, size: 3 + Math.random()*7, spin: Math.random()*Math.PI });
+    addParticle(x, y, Math.cos(ang)*sp, Math.sin(ang)*sp, 1, color, 3 + Math.random()*7, Math.random()*Math.PI);
   }
 }
 
@@ -1382,13 +1466,15 @@ function burst(x, y, color, r) {
 // 코드로 그리는 도형(POLY, SHAPES)과 LIGHT_PASS 는 presets.js 에 있습니다 (프레스 모드와 함께 씁니다)
 function makeSprite(t) {
   const r = t.drawR || t.r, ext = 1.05;   // drawR: 충돌 반지름은 그대로 두고 그림만 크게 그릴 때
-  const pad = Math.round(36 + r*0.35), S = Math.ceil((r*ext + pad) * 2);
+  // 여백은 글로우가 번질 자리입니다. 넓을수록 느립니다 (스프라이트 넓이가 그대로 매 프레임 합성 비용)
+  const pad = Math.round(16 + r*0.14), S = Math.ceil((r*ext + pad) * 2);
   const img = t._imgKey && imgCache[t._imgKey];
+  const hasImg = !!(img && img.complete && img.naturalWidth);
+  const lit = !hasImg && !t.emoji;        // 키트 PNG·이모지는 조명이 그림에 이미 들어 있어 light 층이 통째로 비어 있다
   const layer = (light) => {
     const c = document.createElement("canvas"); c.width = c.height = S;
     const g = c.getContext("2d"); g.translate(S/2, S/2);
     LIGHT_PASS = light;
-    const hasImg = img && img.complete && img.naturalWidth;
     if (!light && !hasImg && !t.emoji) {                              // 코드 도형: 바깥 글로우 원판 (두 겹)
       const [halo, hr] = glowDisc(t.shape);                           // 세기는 presets.js 의 GLOW_DISC 가 정한다
       if (halo > 0) {
@@ -1415,7 +1501,7 @@ function makeSprite(t) {
     LIGHT_PASS = false;
     return c;
   };
-  return { base: layer(false), light: layer(true), S };
+  return { base: layer(false), light: lit ? layer(true) : null, S, lit };   // 빈 조명 층은 만들지도 그리지도 않는다
 }
 function sprite(t) { if (!t._sprite) t._sprite = makeSprite(t); return t._sprite; }
 // 동작 연출용 여벌 그림의 스프라이트 (본체와 같은 방식으로 한 번만 만들어 두고 재사용)
@@ -1534,21 +1620,19 @@ function waxFlakes(b, nx, ny, power = 1) {
   const bits = Math.round((6 + b.r/14) * power);          // 잔 부스러기
   for (let i = 0; i < big; i++) {
     const a = base + (Math.random()-.5)*1.9, sp = (300 + Math.random()*620) * power;
-    particles.push({ x: px + Math.cos(a)*8, y: py + Math.sin(a)*8, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 140,
-      life: 1, color: "#fffdf4", size: 6 + Math.random()*(5 + b.r*0.06), spin: Math.random()*Math.PI,
-      spinV: (Math.random()-.5)*26, decay: 0.95, chip: (Math.random()*4)|0 });
+    addParticle(px + Math.cos(a)*8, py + Math.sin(a)*8, Math.cos(a)*sp, Math.sin(a)*sp - 140,
+                1, "#fffdf4", 6 + Math.random()*(5 + b.r*0.06), Math.random()*Math.PI, (Math.random()-.5)*26, 0.95, (Math.random()*4)|0, false);
   }
   for (let i = 0; i < bits; i++) {                        // 사방으로 더 넓게, 더 빠르게 흩어지는 부스러기
     const a = base + (Math.random()-.5)*2.9, sp = (220 + Math.random()*900) * power;
-    particles.push({ x: px, y: py, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 90,
-      life: 1, color: "#fffdf4", size: 2.5 + Math.random()*4, spin: Math.random()*Math.PI,
-      spinV: (Math.random()-.5)*34, decay: 1.5, chip: (Math.random()*4)|0 });
+    addParticle(px, py, Math.cos(a)*sp, Math.sin(a)*sp - 90,
+                1, "#fffdf4", 2.5 + Math.random()*4, Math.random()*Math.PI, (Math.random()-.5)*34, 1.5, (Math.random()*4)|0, false);
   }
   if (power > 1.4) rings.push({ x: b.x, y: b.y, r0: b.r*0.5, color: "#fffdf4", t: 0 });   // 껍질이 통째로 벗겨질 때만 한 번
   for (let i = 0; i < 4; i++) {                           // 깨진 자리에 잠깐 남는 흰 가루
     const a = Math.random()*Math.PI*2, sp = 30 + Math.random()*90;
-    particles.push({ x: px, y: py, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 30,
-      life: 1, color: "#fffdf4", size: 3 + Math.random()*5, spin: Math.random()*Math.PI, decay: 3.4 });
+    addParticle(px, py, Math.cos(a)*sp, Math.sin(a)*sp - 30,
+                1, "#fffdf4", 3 + Math.random()*5, Math.random()*Math.PI, undefined, 3.4);
   }
 }
 // 불타는 연출용: 숯처럼 그을린 스프라이트와 둥근 불빛을 미리 한 번만 그려 두고 재사용 (매 프레임 필터·블러는 너무 느림)
@@ -1558,7 +1642,7 @@ function charredSprite(t) {
     const c = document.createElement("canvas"); c.width = c.height = sp.S;
     const g = c.getContext("2d");
     g.filter = "brightness(0.3) sepia(1) saturate(2.4) contrast(1.15)";
-    g.drawImage(sp.base, 0, 0); g.drawImage(sp.light, 0, 0);
+    g.drawImage(sp.base, 0, 0); if (sp.lit) g.drawImage(sp.light, 0, 0);
     sp.charred = c;
   }
   return sp.charred;
@@ -1569,7 +1653,7 @@ function ashenSprite(t) {
     const c = document.createElement("canvas"); c.width = c.height = sp.S;
     const g = c.getContext("2d");
     g.filter = "grayscale(1) brightness(0.78) contrast(0.9)";
-    g.drawImage(sp.base, 0, 0); g.drawImage(sp.light, 0, 0);
+    g.drawImage(sp.base, 0, 0); if (sp.lit) g.drawImage(sp.light, 0, 0);
     sp.ashen = c;
   }
   return sp.ashen;
@@ -1581,7 +1665,7 @@ function coldSprite(t) {
     const c = document.createElement("canvas"); c.width = c.height = sp.S;
     const g = c.getContext("2d");
     g.filter = "grayscale(1) brightness(0.3) contrast(1.15)";
-    g.drawImage(sp.base, 0, 0); g.drawImage(sp.light, 0, 0);
+    g.drawImage(sp.base, 0, 0); if (sp.lit) g.drawImage(sp.light, 0, 0);
     g.filter = "none";
     g.globalCompositeOperation = "source-atop";                      // 남은 빛에 차가운 푸른 기운을 입힌다
     g.fillStyle = "rgba(38,58,96,0.5)"; g.fillRect(0, 0, sp.S, sp.S);
@@ -1595,7 +1679,7 @@ function whiteSprite(t) {
   if (!sp.white) {
     const c = document.createElement("canvas"); c.width = c.height = sp.S;
     const g = c.getContext("2d");
-    g.drawImage(sp.base, 0, 0); g.drawImage(sp.light, 0, 0);
+    g.drawImage(sp.base, 0, 0); if (sp.lit) g.drawImage(sp.light, 0, 0);
     g.globalCompositeOperation = "source-in"; g.fillStyle = "#fffdf6"; g.fillRect(0, 0, sp.S, sp.S);
     sp.white = c;
   }
@@ -1647,7 +1731,7 @@ function containerPathOn(g, inset = 0) {
   // 사각형과 원을 같은 방향(시계 방향)으로 그려서 기본 nonzero 규칙으로 합집합이 됩니다
 }
 // 용기 테두리는 매 프레임 블러를 다시 그리면 무거워서 한 번만 그려 두고 재사용 (containerCanvas 는 위쪽에서 선언됨)
-function drawContainer() {
+function buildContainer() {
   if (!containerCanvas) {
     containerCanvas = document.createElement("canvas"); containerCanvas.width = W; containerCanvas.height = H;
     const g = containerCanvas.getContext("2d");
@@ -1684,7 +1768,45 @@ function drawContainer() {
     path(); g.strokeStyle = grad; g.lineWidth = 8; g.shadowColor = SETTINGS.ringColors[0]; g.shadowBlur = 18; g.stroke();
     g.shadowBlur = 0; path(); g.strokeStyle = "rgba(255,255,255,0.85)"; g.lineWidth = 2.5; g.stroke();                            // 하이라이트 선
   }
-  ctx.drawImage(containerCanvas, 0, 0);
+}
+/* ---------- 용기 바깥 덮개 ----------
+   예전에는 공을 그릴 때마다 용기 모양(원+관)으로 클립을 걸었습니다. 사각형이 아닌 클립은
+   그리는 픽셀마다 마스크를 한 번 더 타서, 공 그리기 비용이 거의 두 배가 됐습니다.
+   대신 "배경에서 용기 안쪽만 뚫어낸 그림 + 테두리"를 한 장으로 구워 두고, 공을 클립 없이
+   그린 뒤 이 한 장을 덮습니다. 결과는 같고 덮개는 정수 좌표 한 번 블릿이라 훨씬 쌉니다.  */
+const FRAME_M = 24;                                          // 흔들릴 때 가장자리가 비지 않도록 둘레에 둔 여백
+function buildFrame() {
+  buildContainer();
+  frameCanvas = document.createElement("canvas");
+  frameCanvas.width = W + FRAME_M*2; frameCanvas.height = H + FRAME_M*2;
+  const g = frameCanvas.getContext("2d");
+  g.drawImage(bgCanvas, 0, 0, W, H, 0, 0, W + FRAME_M*2, H + FRAME_M*2);   // 여백까지 늘려 채움 (용기 밖만 보이므로 어긋나도 드러나지 않음)
+  g.save(); g.translate(FRAME_M, FRAME_M);
+  g.globalCompositeOperation = "destination-out";
+  containerPathOn(g, 4); g.fill();                           // 용기 안쪽을 뚫는다 (클립과 같은 inset 4)
+  g.restore();
+  g.drawImage(containerCanvas, FRAME_M, FRAME_M);            // 테두리를 같은 장에 얹는다
+}
+/* ---------- 차오르는 물 (물의 크기 프리셋) ----------
+   마지막 단계까지 얼마나 왔는지에 맞춰 그릇 아래쪽을 물빛으로 채웁니다.
+   원 하나를 잘라 사각형 한 번 칠하는 게 전부라 새로 만드는 객체가 없고 블러도 쓰지 않습니다.  */
+let tideNow = 0;
+function drawTide() {
+  const col = PRESETS[presetName].tide;
+  if (!col) { tideNow = 0; return; }
+  let top = 0;
+  for (const b of bodies) if (b.tier > top) top = b.tier;          // 지금까지 나온 가장 높은 단계
+  const want = Math.min(1, top / Math.max(1, TIERS.length - 1));
+  tideNow += (want - tideNow) * 0.04;                              // 천천히 따라 오른다
+  if (tideNow < 0.01) return;
+  const y = BOWL.cy + BOWL.R - (2*BOWL.R) * tideNow;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(BOWL.cx, BOWL.cy, BOWL.R - 4, 0, Math.PI*2); ctx.clip();
+  ctx.fillStyle = col; ctx.globalAlpha = 0.28;
+  ctx.fillRect(BOWL.cx - BOWL.R, y, BOWL.R*2, BOWL.R*2);
+  ctx.globalAlpha = 0.5;
+  ctx.fillRect(BOWL.cx - BOWL.R, y, BOWL.R*2, 3);                  // 수면 선
+  ctx.restore();
 }
 function drawBody(b) {
   const t = TIERS[b.tier], sp = b.frame != null ? frameSprite(t, b.frame) : sprite(t), h = sp.S/2, k = b.burn, cr = b.crush, sl = b.slain == null ? null : Math.min(1, b.slain);
@@ -1693,6 +1815,16 @@ function drawBody(b) {
   const du = b.dust == null ? null : Math.min(1, b.dust);
   const go = b.gone == null ? null : Math.min(1, b.gone);
   const cl = b.cool == null ? null : Math.min(1, b.cool);
+  // 가장 흔한 경우(연출도 회전도 없는 공)는 정수 좌표 블릿 한 번으로 끝낸다.
+  // 회전이나 소수점 좌표가 끼는 순간 캔버스가 픽셀을 다시 샘플링해서 같은 그림이 10배 넘게 비싸진다.
+  if ((t.noSpin || !b.rot) && !b.pop && k == null && cr == null && sl == null && hw == null && cry == null
+      && sk == null && col == null && du == null && go == null && cl == null
+      && b.ash == null && b.crack == null && !b.jerk && b.grow == null && b.aim == null && !b.sq) {
+    const ix = Math.round(b.x - h), iy = Math.round(b.y - h);
+    ctx.drawImage(sp.base, ix, iy);
+    if (sp.lit) ctx.drawImage(sp.light, ix, iy);
+    return;
+  }
   let s = 1;
   if (b.pop) { b.pop = Math.max(0, b.pop - 0.08); s = 1 + Math.sin(b.pop*Math.PI) * 0.28; }
   if (k != null) s *= 1 + 0.14*Math.sin(Math.min(1, k)*Math.PI) - 0.3*k;   // 번개에 맞아 부풀었다가 오그라듦
@@ -1761,7 +1893,7 @@ function drawBody(b) {
     else if (hw != null) ctx.globalAlpha = 1 - Math.pow(Math.max(0, hw - 0.35) / 0.65, 2);
     else if (sk != null) ctx.globalAlpha = 1 - sk*sk;
     else if (du != null) ctx.globalAlpha = 1 - du*du;
-    ctx.drawImage(sp.light, -h, -h);                                                     // 조명: 고정
+    if (sp.lit) ctx.drawImage(sp.light, -h, -h);                                         // 조명: 고정
     ctx.restore(); return;
   }
   // 타는 중: 뜨겁게 달아올랐다가 숯처럼 그을리며 사라짐
@@ -1772,7 +1904,7 @@ function drawBody(b) {
   ctx.globalAlpha = fade * (1 - char); ctx.drawImage(sp.base, -h, -h);
   ctx.globalAlpha = fade * char;       ctx.drawImage(charredSprite(t), -h, -h);
   ctx.restore();
-  ctx.globalAlpha = fade * (1 - char); ctx.drawImage(sp.light, -h, -h);
+  if (sp.lit) { ctx.globalAlpha = fade * (1 - char); ctx.drawImage(sp.light, -h, -h); }
   ctx.restore();
 }
 function drawLegend() {
@@ -1781,7 +1913,7 @@ function drawLegend() {
   for (let i = 0; i < n; i++) {
     const t = TIERS[i], x = pad + slot*(i+.5), sp = sprite(t);
     const r = 20 + i * (24 / Math.max(1, n-1)), k = r / t.r, w = sp.S*k;
-    ctx.drawImage(sp.base, x - w/2, y - w/2, w, w); ctx.drawImage(sp.light, x - w/2, y - w/2, w, w);
+    ctx.drawImage(sp.base, x - w/2, y - w/2, w, w); if (sp.lit) ctx.drawImage(sp.light, x - w/2, y - w/2, w, w);
     if (i < n-1) { ctx.fillStyle = "rgba(255,255,255,.3)"; ctx.font = "26px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("›", x + slot/2, y); }
   }
   ctx.restore();
@@ -1790,9 +1922,10 @@ function render() {
   if (!bgCanvas) buildBackground();
   ctx.save();
   ctx.drawImage(bgCanvas, 0, 0);
-  if (shake > 0) { ctx.translate((Math.random()-.5)*shake, (Math.random()-.5)*shake); shake *= 0.85; if (shake < .5) shake = 0; }
+  // 흔들림은 정수 픽셀로 (소수 좌표면 덮개 블릿이 느린 경로로 떨어집니다)
+  if (shake > 0) { ctx.translate(Math.round((Math.random()-.5)*shake), Math.round((Math.random()-.5)*shake)); shake *= 0.85; if (shake < .5) shake = 0; }
   ctx.save();
-  containerPathOn(ctx, 4); ctx.clip();
+  drawTide();
   for (const b of bodies) drawBody(b);
   for (const rg of rings) {                                     // 합체 충격파
     if (rg.t < 0) continue;
@@ -1816,7 +1949,8 @@ function render() {
   }
   ctx.globalAlpha = 1;
   ctx.restore();
-  drawContainer();
+  if (!frameCanvas) buildFrame();
+  ctx.drawImage(frameCanvas, -FRAME_M, -FRAME_M);             // 용기 밖을 덮고 테두리까지 한 번에
   for (const c of confetti) {                                   // 축하 색종이 (화면 전체)
     ctx.save(); ctx.globalAlpha = Math.min(1, c.life); ctx.translate(c.x, c.y); ctx.rotate(c.rot);
     ctx.fillStyle = c.color; ctx.fillRect(-c.w/2, -c.h/2, c.w, c.h); ctx.restore();
@@ -1935,7 +2069,7 @@ function loop(now) {
       for (const e of due) e.fn();
     }
     for (const bt of bolts) bt.t += frame * 6;                   // 번개는 0.17초쯤 번쩍이고 사라짐
-    bolts = bolts.filter(bt => bt.t < 1);
+    compact(bolts, keepBolt);
     if (meteor) {                                                // 운석이 하늘에서 내려오는 중
       meteor.t += frame / meteor.dur;
       if (meteor.t >= 1) meteorImpact(meteor.x1, meteor.y1);
@@ -1944,7 +2078,7 @@ function loop(now) {
       if (a.t < 1) { a.t += frame / a.dur; if (a.t >= 1) { a.t = 1; arrowHit(a); } }
       else a.life -= frame * 3;                                  // 꽂힌 뒤엔 궤적만 잠깐 남았다 사라짐
     }
-    arrows = arrows.filter(a => a.life > 0);
+    compact(arrows, keepAlive);
     if (finaleBusy) {                                            // 피날레에 걸린 요소들의 진행
       let gone = false;
       for (const b of bodies) {
@@ -2020,9 +2154,9 @@ function loop(now) {
       d.x += (d.vx + Math.sin(d.sway) * d.swing) * frame; d.y += d.vy * frame;
       d.rot += d.spin * frame; d.life -= frame;
     }
-    drifts = drifts.filter(d => d.life > 0 && d.y < H + 80 && d.y > -120);
+    compact(drifts, keepDrift);
     for (const c of confetti) { c.vy += 1400*frame; c.vx *= 0.985; c.vy *= 0.99; c.sway += frame*5; c.x += (c.vx + Math.sin(c.sway)*90)*frame; c.y += c.vy*frame; c.rot += c.spin*frame; c.life -= frame; }
-    confetti = confetti.filter(c => c.life > 0 && c.y < H + 40);
+    compact(confetti, keepConfetti);
     for (const p of particles) {
       p.x += p.vx*frame; p.y += p.vy*frame; p.vy += 1500*frame;
       p.life -= frame * (p.decay || 1.6); p.spin += frame * (p.spinV || 6);
@@ -2036,11 +2170,11 @@ function loop(now) {
         }
       }
     }
-    particles = particles.filter(p => p.life > 0);
+    compact(particles, keepAlive, particlePool);
     for (const p of popups) p.t += frame * 1.2;
-    popups = popups.filter(p => p.t < 1);
+    compact(popups, keepT);
     for (const rg of rings) rg.t += frame * 2.2;
-    rings = rings.filter(rg => rg.t < 1);
+    compact(rings, keepT);
   }
   render();
   requestAnimationFrame(loop);
@@ -2070,7 +2204,7 @@ modeSel.onchange = () => {
 const sel = document.getElementById("presetSel");
 for (const k of Object.keys(PRESETS)) { const o = document.createElement("option"); o.value = k; o.textContent = k; sel.appendChild(o); }
 sel.value = presetName;
-sel.onchange = () => { presetName = sel.value; TIERS = PRESETS[presetName].items; applySize(); bounceOverride = speedOverride = rateOverride = gravOverride = null; syncBounceUI(); syncTuneUI(); setPaused(true); loadImages().then(() => { reset(); setPaused(false); }); };
+sel.onchange = () => { presetName = sel.value; TIERS = PRESETS[presetName].items; applySpinLimit(); applySize(); bounceOverride = speedOverride = rateOverride = gravOverride = dropOverride = null; syncBounceUI(); syncTuneUI(); setPaused(true); loadImages().then(() => { reset(); setPaused(false); }); };
 const bounceIn = document.getElementById("bounce"), bounceVal = document.getElementById("bounceVal");
 function syncBounceUI() { bounceIn.value = bounce(); bounceVal.textContent = bounce().toFixed(2); }
 bounceIn.oninput = () => { bounceOverride = parseFloat(bounceIn.value); syncBounceUI(); };   // 슬라이더는 즉시 반영 (프리셋을 바꾸면 그 프리셋 기본값으로 돌아감)

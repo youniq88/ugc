@@ -70,6 +70,16 @@ const KITS = {
   universe: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
   ],
+  // 우주의 종말 프리셋 전용: 새로 만든 이미지가 없습니다. 먼지와 소행성은 starlife,
+  // 달·행성·항성은 cosmos, 블랙홀은 heatdeath, 성운·은하는 universe 것을 그대로 씁니다.
+  // 마지막 열죽음만 코드 도형(voidend)입니다.
+  doom: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
+  // 물의 크기 프리셋 전용: 사진풍 물 9종 (AI 렌더링, 512px 투명 PNG, 같은 CDN)
+  flood: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
   // 온도 사다리 프리셋 전용: 사진풍 천체·물질 7종 (AI 렌더링, 512px 투명 PNG, 같은 CDN).
   // 지구와 태양은 cosmos 키트의 이미지를 그대로 씁니다 (universe 가 하는 것과 같은 방식).
   heat: [
@@ -214,6 +224,45 @@ const PRESETS = {
       { r:132, shape:"whitedwarf",glow:"#9fd0ff", noSpin:true },    // 백색왜성 10^6 g/cm3 (한 숟갈에 1톤)
       { r:160, shape:"neutron",   glow:"#8ec8ff", noSpin:true },    // 중성자별 4x10^14 g/cm3 (한 숟갈에 산 하나 무게)
       { r:195, shape:"blackhole", glow:"#ff9a3d", noSpin:true },    // 블랙홀 (특이점, 밀도를 셀 수 없음)
+    ],
+  },
+  doom: {      // 9단계 우주의 종말: 먼지 → 소행성 → 달 → 행성 → 항성 → 블랙홀 → 성운 → 은하 → 열죽음
+    // 반응이 가장 좋았던 우주·스케일·블랙홀 조합을 그대로 씁니다. 성운 다음에 은하가 오는 순서는
+    // 블랙홀 게시물 댓글에서 직접 요청받은 구조입니다.
+    // 이미지는 한 장도 새로 만들지 않고 기존 키트에서 가져다 씁니다. 마지막 열죽음만 코드 도형입니다.
+    kit: "doom", sound: "nova", finale: "cool",   // 열죽음이 나오면 남은 것이 하나씩 식어 꺼지고 화면이 검게 닫힘
+    dropTiers: 3, rate: 300,   // 분당 300개. 더 빨리 떨어뜨리면 통이 붐벼서 입구가 막히는 판이 섞입니다 (10회 중 1~3회)
+    spinMaxTier: 3,   // 행성보다 큰 것은 돌지 않습니다. 항성·성운·은하가 도는 건 어색하고 그리기도 훨씬 비쌉니다
+    blackhole: 5,   // 여섯째 단계(블랙홀)가 주변의 작은 것을 약하게 끌어당깁니다. 아래 pullBlackholes 참고
+    items: [
+      { r:36,  img:"130ad2b9-b004-42aa-8e15-5d8c7a637098.png", glow:"#c98bff", scale:1.08 },   // 먼지 (starlife 재사용)
+      { r:46,  img:"4c822eda-8fa1-429a-b1a4-222751b49f23.png", glow:"#c9a888", scale:1.08 },   // 소행성 (starlife 재사용)
+      { r:57,  img:"39cc1723-dfbe-4b2c-8271-f5d6a1ed8049.png", glow:"#d8d8d8", scale:1.04 },   // 달 (cosmos 재사용)
+      { r:71,  img:"3ab5cb9b-35b9-4e72-b162-db4aa42842da.png", glow:"#4da3ff", scale:1.04 },   // 행성 (cosmos 지구 재사용)
+      { r:88,  img:"5f6cb703-7cfe-417f-a9e7-ce2e2074b596.png", glow:"#ffb300", scale:1.04 },   // 항성 (cosmos 태양 재사용)
+      { r:108, img:"82b74bf6-3ca5-4fdd-ad61-7e858b913ccc.png", glow:"#ff9a3d", scale:1.04, noSpin:true },   // 블랙홀 (heatdeath 재사용)
+      { r:132, img:"3fd5ae8f-8b3d-4869-86ea-21d2b91b8309.png", glow:"#ff7ad6", scale:1.06 },   // 성운 (universe 오리온 성운 재사용)
+      { r:160, img:"af9d6cbf-70de-4814-9789-238ae944bf9f.png", glow:"#9ec6ff", scale:1.06 },   // 은하 (universe 우리은하 재사용)
+      { r:195, shape:"voidend", glow:"#20304a", noSpin:true },                                 // 열죽음 (코드 도형)
+    ],
+  },
+  flood: {     // 9단계 물의 크기: 빗방울 → 웅덩이 → 시냇물 → 강 → 호수 → 폭포 → 바다 → 태풍 → 잠긴 지구
+    // 우주가 아닌 소재로 같은 구조를 씁니다. 빗방울 하나에서 시작해 지구가 물에 잠기는 데서 끝나므로
+    // 지금 어디까지 왔는지가 한눈에 보이고, 마지막에 무엇이 나오는지 끝까지 봐야 알 수 있습니다.
+    kit: "flood", sound: "sonar", finale: "vortex",   // 잠긴 지구가 나오면 남은 것을 전부 빨아들이고 화면이 닫힘
+    dropTiers: 3,
+    spinMaxTier: 3,   // 호수보다 큰 물은 돌지 않습니다. 폭포나 바다가 데굴데굴 구르면 물로 보이지 않습니다
+    tide: "#1d5f8a",   // 진행할수록 그릇 아래에서 물이 차오릅니다 (아래 drawTide 참고)
+    items: [
+      { r:36,  img:"9424fb39-6f97-4ca5-a776-04916ae2458a.png", glow:"#9fe4ff", scale:1.04 },   // 빗방울
+      { r:46,  img:"736c42f5-1045-4f2b-bdbf-e232e6344e88.png", glow:"#7fc4e8", scale:1.04 },   // 웅덩이
+      { r:57,  img:"287cb0a2-7f12-45b0-9b1d-51b0a6989c8e.png", glow:"#8fd8c8", scale:1.04 },   // 시냇물
+      { r:71,  img:"483f23be-2e77-4c61-917a-111e13e1f922.png", glow:"#6aa86a", scale:1.04 },   // 강
+      { r:88,  img:"f56aca64-3eca-4f6f-a4f2-3cb837f6fd21.png", glow:"#3f7f8f", scale:1.04 },   // 호수
+      { r:108, img:"e5f8dfdd-8c32-4b44-8b51-5258b46bb367.png", glow:"#dff0ff", scale:1.04 },   // 폭포
+      { r:132, img:"3a832f2d-d68e-491f-9b94-3f6791fdbad6.png", glow:"#2f6fa8", scale:1.04 },   // 바다
+      { r:160, img:"32b99875-c456-44d1-b38c-89fbf2dd7bdd.png", glow:"#e8f2ff", scale:1.04, noSpin:true },   // 태풍
+      { r:195, img:"4aab4acb-9ff2-4be7-b5aa-51b0a2cc7fb0.png", glow:"#2f8fd8", scale:1.04, noSpin:true },   // 잠긴 지구
     ],
   },
   heat: {      // 9단계 온도 사다리: 절대영도 → 우주배경복사 → 명왕성 → 지구 → 금성 → 용암 → 태양 표면 → 초신성 → 빅뱅 1초 후
