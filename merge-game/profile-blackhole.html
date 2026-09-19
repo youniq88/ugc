@@ -1,0 +1,58 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}canvas{display:block}</style></head><body>
+<canvas id="c" width="1080" height="1080"></canvas>
+<script>
+const c = document.getElementById("c"), g = c.getContext("2d"), W = 1080, H = 1080, cx = 540, cy = 540, R = 400;
+// 배경: 깊은 우주 + 성운
+const bg = g.createRadialGradient(cx, cy, 0, cx, cy, 760); bg.addColorStop(0, "#1a0b1f"); bg.addColorStop(0.5, "#07040f"); bg.addColorStop(1, "#000000");
+g.fillStyle = bg; g.fillRect(0, 0, W, H);
+const neb = g.createRadialGradient(cx - 120, cy + 60, 0, cx, cy, 700); neb.addColorStop(0, "rgba(120,60,180,0.18)"); neb.addColorStop(0.5, "rgba(255,110,40,0.06)"); neb.addColorStop(1, "rgba(0,0,0,0)");
+g.fillStyle = neb; g.fillRect(0, 0, W, H);
+// 별 (고정 시드)
+let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+for (let i = 0; i < 260; i++) { const x = rnd()*W, y = rnd()*H, s = rnd()*1.8 + 0.3, a = 0.25 + rnd()*0.7; g.fillStyle = `rgba(255,255,255,${a})`; g.beginPath(); g.arc(x, y, s, 0, Math.PI*2); g.fill(); }
+for (let i = 0; i < 6; i++) { const x = rnd()*W, y = rnd()*H, s = 2.2 + rnd()*1.5; g.save(); g.shadowColor = "#fff"; g.shadowBlur = 14; g.fillStyle = "#fff"; g.beginPath(); g.arc(x, y, s, 0, Math.PI*2); g.fill(); g.restore(); }
+
+g.translate(cx, cy);
+const r = R, hole = r*0.4;
+// 바깥 열 안개
+const haze = g.createRadialGradient(0, 0, hole*0.9, 0, 0, r*1.15);
+haze.addColorStop(0, "rgba(255,180,80,0.55)"); haze.addColorStop(0.45, "rgba(255,120,30,0.16)"); haze.addColorStop(1, "rgba(255,90,20,0)");
+g.beginPath(); g.arc(0, 0, r*1.15, 0, Math.PI*2); g.fillStyle = haze; g.fill();
+// 가로 강착 원반 (도플러)
+const disk = (front) => {
+  g.save(); g.rotate(-0.1);
+  const dg = g.createLinearGradient(-r, 0, r, 0);
+  dg.addColorStop(0, "rgba(255,130,40,0.10)"); dg.addColorStop(0.14, "rgba(255,150,50,0.6)"); dg.addColorStop(0.3, "rgba(255,250,235,1)");
+  dg.addColorStop(0.55, "rgba(255,200,110,0.95)"); dg.addColorStop(0.8, "rgba(255,120,40,0.5)"); dg.addColorStop(1, "rgba(200,70,20,0.10)");
+  g.shadowColor = "rgba(255,170,80,0.9)"; g.shadowBlur = 40;
+  g.beginPath(); g.ellipse(0, 0, r*1.0, r*0.13, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI*2);
+  g.strokeStyle = dg; g.lineWidth = r*0.2; g.lineCap = "round"; g.stroke();
+  g.shadowBlur = 0;
+  g.beginPath(); g.ellipse(0, 0, r*0.62, r*0.078, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI*2);
+  g.strokeStyle = "rgba(255,245,225,0.75)"; g.lineWidth = r*0.045; g.stroke();
+  // 원반 결(줄무늬)
+  for (let k = 0; k < 6; k++) { g.beginPath(); g.ellipse(0, 0, r*(0.7 + k*0.055), r*(0.09 + k*0.007), 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI*2); g.strokeStyle = `rgba(255,${200 - k*15},${120 - k*12},${0.22 - k*0.03})`; g.lineWidth = r*0.012; g.stroke(); }
+  g.restore();
+};
+disk(false);
+// 광환(렌즈된 원반)
+const ring = g.createRadialGradient(0, 0, hole*1.02, 0, 0, hole*1.8);
+ring.addColorStop(0, "rgba(255,238,205,1)"); ring.addColorStop(0.25, "rgba(255,205,115,0.92)"); ring.addColorStop(0.65, "rgba(255,135,45,0.38)"); ring.addColorStop(1, "rgba(255,100,30,0)");
+g.beginPath(); g.arc(0, 0, hole*1.8, 0, Math.PI*2); g.fillStyle = ring; g.fill();
+const dop = g.createLinearGradient(-hole*1.8, 0, hole*1.8, 0);
+dop.addColorStop(0, "rgba(255,255,255,0.35)"); dop.addColorStop(0.5, "rgba(0,0,0,0)"); dop.addColorStop(1, "rgba(60,20,0,0.4)");
+g.beginPath(); g.arc(0, 0, hole*1.8, 0, Math.PI*2); g.fillStyle = dop; g.fill();
+// 광자 고리
+g.save(); g.shadowColor = "rgba(255,230,180,1)"; g.shadowBlur = hole*0.5;
+g.beginPath(); g.arc(0, 0, hole*1.08, 0, Math.PI*2); g.strokeStyle = "rgba(255,248,232,0.98)"; g.lineWidth = hole*0.07; g.stroke(); g.restore();
+// 사건의 지평선
+g.beginPath(); g.arc(0, 0, hole, 0, Math.PI*2); g.fillStyle = "#000"; g.fill();
+const edge = g.createRadialGradient(0, 0, hole*0.84, 0, 0, hole);
+edge.addColorStop(0, "rgba(0,0,0,0)"); edge.addColorStop(1, "rgba(255,160,70,0.5)");
+g.beginPath(); g.arc(0, 0, hole, 0, Math.PI*2); g.fillStyle = edge; g.fill();
+disk(true);
+g.setTransform(1, 0, 0, 1, 0, 0);
+// 비네트
+const vg = g.createRadialGradient(cx, cy, 380, cx, cy, 780); vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.75)");
+g.fillStyle = vg; g.fillRect(0, 0, W, H);
+</script></body></html>
