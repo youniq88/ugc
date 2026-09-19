@@ -70,6 +70,11 @@ const KITS = {
   universe: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
   ],
+  // 온도 사다리 프리셋 전용: 사진풍 천체·물질 7종 (AI 렌더링, 512px 투명 PNG, 같은 CDN).
+  // 지구와 태양은 cosmos 키트의 이미지를 그대로 씁니다 (universe 가 하는 것과 같은 방식).
+  heat: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
   // 우주의 마지막 날 프리셋 전용: 사진풍 천체 7종 (AI 렌더링, 512px 투명 PNG, 같은 CDN).
   // 검은 왜성과 열적 죽음은 거의 빛이 없어서 이미지로는 형체가 안 잡히므로 코드로 그립니다.
   heatdeath: [
@@ -209,6 +214,26 @@ const PRESETS = {
       { r:132, shape:"whitedwarf",glow:"#9fd0ff", noSpin:true },    // 백색왜성 10^6 g/cm3 (한 숟갈에 1톤)
       { r:160, shape:"neutron",   glow:"#8ec8ff", noSpin:true },    // 중성자별 4x10^14 g/cm3 (한 숟갈에 산 하나 무게)
       { r:195, shape:"blackhole", glow:"#ff9a3d", noSpin:true },    // 블랙홀 (특이점, 밀도를 셀 수 없음)
+    ],
+  },
+  heat: {      // 9단계 온도 사다리: 절대영도 → 우주배경복사 → 명왕성 → 지구 → 금성 → 용암 → 태양 표면 → 초신성 → 빅뱅 1초 후
+    // 우주에서 가장 차가운 것에서 시작해 가장 뜨거웠던 순간으로 끝납니다. 단계마다 색이 검푸름에서 흰빛으로
+    // 한 방향으로만 옮겨 가서, 소리를 끄고 봐도 지금 어디쯤 왔는지가 한눈에 보입니다.
+    // 짧게 끝나도록 맞춘 프리셋입니다. 아래 네 단계를 섞어 떨어뜨려 초반을 건너뜁니다.
+    // 릴스 앞부분에서 이미 색이 눈에 띄게 바뀌어 있어야 끝까지 보게 됩니다. 합격 기준은 클리어 타임 90초 이내입니다.
+    kit: "heat", sound: "nova", finale: "annihilate",   // 빅뱅이 나오면 하얗게 터지며 전부 빛으로 분해됨
+    dropTiers: 4,   // 아래 네 단계를 섞어 떨어뜨려 초반을 건너뜁니다. 다섯째 단계부터는 관보다 굵어서 어차피 못 내려옵니다.
+                    // rate 는 일부러 비워 둡니다. 값을 적으면 그만큼만 떨어뜨려 오히려 느려집니다 (220 으로 재 보니 74초).
+    items: [
+      { r:36,  img:"27fff66c-ed66-427d-8da2-b048a4f692d7.png", glow:"#4a7fd8", scale:1.04 },   // 절대영도 -273도 (우주에서 가장 차가운 온도)
+      { r:46,  img:"69f475f7-ab42-49db-a5c8-73fb1303f5f9.png", glow:"#7a4ad8", scale:1.04 },   // 우주배경복사 -270도 (빅뱅이 남긴 잔열)
+      { r:57,  img:"635dd798-15df-4177-aa19-d75c11cf468a.png", glow:"#d8c4a0", scale:1.04 },   // 명왕성 -229도
+      { r:71,  img:"3ab5cb9b-35b9-4e72-b162-db4aa42842da.png", glow:"#4da3ff", scale:1.04 },   // 지구 15도 (cosmos 키트 재사용)
+      { r:88,  img:"d59072a6-d59e-4dfb-b7b0-b2f70eaca8fc.png", glow:"#e8b84d", scale:1.04 },   // 금성 464도 (납이 녹는 온도)
+      { r:108, img:"c4fa8df0-0f36-4984-bdb6-1ee4f1c9449f.png", glow:"#ff6a1a", scale:1.04 },   // 용암 1,200도
+      { r:132, img:"5f6cb703-7cfe-417f-a9e7-ce2e2074b596.png", glow:"#ffb300", scale:1.04 },   // 태양 표면 5,500도 (cosmos 키트 재사용)
+      { r:160, img:"31b3b183-77ac-4814-98a2-42865da6952a.png", glow:"#8ecbff", scale:1.06 },   // 초신성 1억도
+      { r:195, img:"22af685a-e3e9-4e5a-b367-85c880b98cc4.png", glow:"#ffffff", scale:1.04 },   // 빅뱅 1초 후 100억도
     ],
   },
   heatdeath: { // 9단계 우주의 마지막 날: 별 탄생 → 붉은 거성 → 백색왜성 → 은하 충돌 → 마지막 별 → 검은 왜성 → 블랙홀의 시대 → 호킹 증발 → 열적 죽음
