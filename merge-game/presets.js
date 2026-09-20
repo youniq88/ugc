@@ -76,6 +76,14 @@ const KITS = {
   doom: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
   ],
+  // 생명의 크기 프리셋 전용: 세균부터 대륙까지 9종 (AI 렌더링, 1024px 투명 PNG, 같은 CDN)
+  lifescale: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
+  // 빡침 게이지 프리셋 전용: 우리가 만든 오리지널 캐릭터의 분노 9단계 (AI 렌더링, 1024px 투명 PNG, 같은 CDN)
+  rage: [
+    "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
+  ],
   // 물의 크기 프리셋 전용: 사진풍 물 9종 (AI 렌더링, 512px 투명 PNG, 같은 CDN)
   flood: [
     "https://d2ol7oe51mr4n9.cloudfront.net/user_3EqJlrQps4r0GBhzHSZNDkCfWAY/",
@@ -224,6 +232,54 @@ const PRESETS = {
       { r:132, shape:"whitedwarf",glow:"#9fd0ff", noSpin:true },    // 백색왜성 10^6 g/cm3 (한 숟갈에 1톤)
       { r:160, shape:"neutron",   glow:"#8ec8ff", noSpin:true },    // 중성자별 4x10^14 g/cm3 (한 숟갈에 산 하나 무게)
       { r:195, shape:"blackhole", glow:"#ff9a3d", noSpin:true },    // 블랙홀 (특이점, 밀도를 셀 수 없음)
+    ],
+  },
+  lifescale: {  // 9단계 생명의 크기: 세균 -> 개미 -> 쥐 -> 고양이 -> 사람 -> 코끼리 -> 고래 -> 섬 -> 대륙
+    // 검증 계열입니다. 반응이 가장 좋았던 "실물 스케일 비교"를 우주가 아닌 생명으로 옮겼습니다.
+    // 단계마다 크기 차이를 크게 벌려서, 숫자 없이도 한 칸 오를 때마다 규모가 확 뛰는 게 보이게 했습니다.
+    kit: "lifescale", sound: "space", finale: "bloom",
+    speed: 1500,        // 낙하 속도 (px/s). 빠른 템포가 검증된 요소라 기본 950보다 훨씬 빠르게 갑니다
+    rate: 550,          // 분당 550개. 관이 허용하는 최대치(643)로 두면 평균 19초로 목표(20~35초)보다 빨리 끝납니다
+    size: 0.8,          // 흡수 기믹이 없어서 요소를 8할 크기로 줄여 정체를 막습니다
+    dropTiers: 3,
+    spinMaxTier: -1,    // 하나도 돌지 않습니다. 개수가 가장 많은 세균·개미를 돌리면 통이 꽉 찬 판에서
+                        // 33ms 넘는 프레임이 1% 기준을 넘었습니다 (공 52개일 때 2.80%). 이 크기에서는
+                        // 구르는지 아닌지 거의 보이지 않아 그림으로는 손해가 없습니다
+    pulse: 1,           // 부딪히면 찌그러지지 않고 크기만 한 번 울립니다
+    slowFinal: 0.9,     // 마지막 합체만 슬로모로 늘립니다
+    items: [
+      { r:34,  img:"50de6c7b-d5d0-4400-b449-2b6d98990e6b.png", glow:"#7fe8b0" },   // 세균
+      { r:45,  img:"9bc7ad2a-28da-43fd-bcf0-577aa8ecf2da.png", glow:"#8a7a66" },   // 개미
+      { r:58,  img:"96e5e6c2-fee1-4613-8dfb-df76ceab314e.png", glow:"#b9b0a6" },   // 쥐
+      { r:74,  img:"91dcd8e0-fa69-4bbc-8ebb-ad6c08666978.png", glow:"#f0a04b" },   // 고양이
+      { r:93,  img:"5f44abcc-1e6d-42a7-bf8a-c15a90093fbb.png", glow:"#7fb0e8" },   // 사람
+      { r:117, img:"7a6de74e-62d6-4ab2-87e2-27fd9d44f7d7.png", glow:"#9aa3ab" },   // 코끼리
+      { r:145, img:"353e11c9-148b-4b45-99c9-a7cafe021945.png", glow:"#4f86c6" },   // 고래
+      { r:178, img:"0ee98bec-7370-475a-a24c-31ca216c2add.png", glow:"#4fd8d0" },   // 섬
+      { r:215, img:"601b8ae4-1dcb-4d66-9ee9-38a6ecb31691.png", glow:"#6fd08a" },   // 대륙
+    ],
+  },
+  rage: {       // 9단계 빡침 게이지: 무표정 -> 심드렁 -> 짜증 -> 열받음 -> 폭발직전 -> 이성상실 -> 악마화 -> 초신성 분노 -> 우주 파괴
+    // 밈/캐릭터 계열입니다. 우리가 만든 오리지널 캐릭터 하나가 단계마다 더 화를 냅니다.
+    // 스케일물이 아니라 표정으로 단계를 읽히게 하는 구조라, 규칙 설명 없이도 다음이 뭘지 짐작됩니다.
+    kit: "rage", sound: "juicy", finale: "rageout",
+    speed: 1500,
+    rate: 550,
+    size: 0.8,
+    dropTiers: 3,
+    spinMaxTier: -1,    // 하나도 돌지 않습니다. 얼굴이 기울면 표정이 안 읽히고, 회전은 그리기 비용도 큽니다
+    pulse: 1.3,         // 화난 캐릭터라 충돌 펄스를 조금 더 크게 잡았습니다
+    slowFinal: 0.9,
+    items: [
+      { r:34,  img:"693c9fd2-f2ef-4855-8c07-ee636efe46d2.png", glow:"#bfe8cf" },   // 무표정
+      { r:45,  img:"302901b5-3eac-4e67-994d-690da7a9da72.png", glow:"#f2dc8a" },   // 심드렁
+      { r:58,  img:"3834f6c6-1183-4a8f-bc51-2eff2271ad55.png", glow:"#f0a860" },   // 짜증
+      { r:74,  img:"8879b4ce-2bae-4872-96e4-8d68403980a4.png", glow:"#f07840" },   // 열받음
+      { r:93,  img:"aba3335d-7c4d-4714-9cf3-77711983c014.png", glow:"#ff4a30" },   // 폭발직전
+      { r:117, img:"95fe2cd0-be4b-49ab-bd40-d3505c28d40e.png", glow:"#ff5a1a" },   // 이성상실
+      { r:145, img:"84eb3145-1ae8-4281-8282-ca43408f07d0.png", glow:"#a02cff" },   // 악마화
+      { r:178, img:"cccd0704-25c2-46f7-8a2f-0f0ecaa386e3.png", glow:"#ffe07a" },   // 초신성 분노
+      { r:215, img:"e4a33921-5d86-4d58-9fc4-04fc874ab95f.png", glow:"#ff3a1a" },   // 우주 파괴
     ],
   },
   doom: {      // 9단계 우주의 종말: 먼지 → 소행성 → 달 → 행성 → 항성 → 블랙홀 → 성운 → 은하 → 열죽음

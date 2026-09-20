@@ -137,7 +137,7 @@ function applySpinLimit() {
 }
 applySpinLimit();
 let sizeOverride = null;                 // 요소 크기 배율 (모든 단계의 반지름에 같은 값을 곱한다)
-function sizeScale() { return sizeOverride ?? 1; }
+function sizeScale() { return sizeOverride ?? PRESETS[presetName].size ?? 1; }   // 프리셋이 size 를 가지면 그 배율로 시작한다
 // 프리셋이 정한 단계별 반지름에 같은 배율을 곱합니다. 프레스 모드의 공 크기 조절과 같은 자리입니다.
 // 원래 값을 _r0 에 넣어 두고 언제나 거기서 다시 계산하므로, 배율을 오르내려도 값이 조금씩 밀리지 않습니다.
 // 떨어뜨릴 단계 수는 관을 통과하는 크기까지만 쓰도록 깎이므로(randTier), 크기를 줄이면 덜 깎입니다.
@@ -198,6 +198,7 @@ let meteor = null;                       // 떨어지는 운석 (공룡 피날�
 let moon = null;                         // 떠오르는 보름달 (강아지 피날레)
 let voidDim = 0, voidDimTo = 0;          // 블랙홀이 삼킨 뒤 닫히는 화면
 let whiteDim = 0, whiteDimTo = 0, whiteFall = 1.2;   // 반물질 폭발이 화면을 하얗게 채웠다가 빠지는 정도 (빠지는 속도는 따로 잡음)
+let rageDim = 0, rageDimTo = 0;          // 분노가 화면을 붉게 물들이는 정도
 let physicsHoldMs = 3000;                // 클리어 후 물리를 더 굴리는 시간 (핑거스냅은 무너지는 걸 보여줘야 해서 길게)
 let nightDim = 0, nightDimTo = 0;        // 푸른 밤으로 내려앉는 화면
 let ashFall = false, ashDim = 0, ashDimTo = 0;   // 화산재 (폼페이 피날레)
@@ -245,7 +246,12 @@ function loadImages() {
   return Promise.race([Promise.all(jobs), new Promise(r => setTimeout(r, 6000))])
     .then(() => { if (PRESETS[presetName].shell) bakeShells(); bakeSprites(); });   // 왁뿌볼 껍질과 단계 그림은 미리 구워 둔다
 // 단계 그림도 처음 만들 때 비싸다(한 장에 1ms 안팎). 경기 중 새 단계가 처음 나올 때 끊기지 않도록 시작할 때 전부 만들어 둔다
-function bakeSprites() { for (const t of TIERS) { t._sprite = null; sprite(t); } }
+function bakeSprites() {
+  for (const t of TIERS) { t._sprite = null; sprite(t); }
+  if (PRESETS[presetName].pulse) {                              // 충돌 펄스를 쓰는 프리셋은 펄스 그림까지 미리 굽는다
+    for (const t of TIERS) for (let i = 0; i < PULSE_SCALES.length; i++) pulseSprite(t, (PULSE_SCALES[i] - 1) / 0.085);
+  }
+}
 }
 // 껍질 그림은 처음 만들 때 비싸다. 시작할 때 전부 만들어 두면 경기 중에 끊기지 않는다
 function bakeShells() {
@@ -256,6 +262,7 @@ function reset() {
   bodies = []; particles.length = 0; popups.length = 0; rings.length = 0; confetti.length = 0; bolts.length = 0; fxQueue = []; drifts.length = 0; score = 0; overSince = 0; flash = 0; ended = false;
   finaleBusy = false; meteor = null; ashFall = false; ashDim = 0; ashDimTo = 0; arrows = [];
   moon = null; nightDim = 0; nightDimTo = 0; voidDim = 0; voidDimTo = 0; whiteDim = 0; whiteDimTo = 0; whiteFall = 1.2; physicsHoldMs = 3000;
+  rageDim = 0; rageDimTo = 0; slowLeft = 0;
   tideNow = 0;
   nextTier = randTier(); lastDrop = gt; melodyIdx = 0;   // 멜로디도 처음부터
 }
@@ -274,7 +281,7 @@ function spawn(tier, x, y, vx=0, vy=0, inTube=false) {
 }
 // 낙하 속도 / 분당 발사 수 / 중력: UI 슬라이더와 URL 로 바꿀 수 있음 (null이면 SETTINGS 기본값)
 let speedOverride = null, rateOverride = null, gravOverride = null, dropOverride = null;
-function tubeSpeed() { return speedOverride ?? SETTINGS.tubeSpeed; }
+function tubeSpeed() { return speedOverride ?? PRESETS[presetName].speed ?? SETTINGS.tubeSpeed; }   // 프리셋이 speed 를 가지면 그만큼 빨리 내려온다
 function gravity() { return gravOverride ?? SETTINGS.gravity; }
 // 관 안에서 앞뒤가 겹치지 않는 최대 발사 수. 슬라이더를 더 올려도 여기서 막힘
 function maxDropsPerMin() { return tubeCount() * 60000 / (dropSpacing() / tubeSpeed() * 1000); }
@@ -284,7 +291,7 @@ function dropsPerMin() { return Math.min(rateOverride ?? PRESETS[presetName].rat
 function dropSpacing() {
   let maxR = 0;
   for (let i = 0; i < Math.min(dropTiers(), TIERS.length); i++) if (TIERS[i].r < TUBE.half - 4) maxR = Math.max(maxR, TIERS[i].r);
-  return maxR * 2 + SETTINGS.tubeGap;
+  return maxR * 2 + (PRESETS[presetName].gap ?? SETTINGS.tubeGap);
 }
 function dropIntervalMs() { return 60000 / dropsPerMin(); }
 let dropTube = 0;                                    // 관을 번갈아 가며 씀
@@ -294,7 +301,11 @@ function drop() {
   const t = TUBES[dropTube], V = tubeSpeed();
   spawn(tier, t.mx - t.back*t.dx, t.my - t.back*t.dy, V*t.dx, V*t.dy, true);   // 화면 밖에서 관 방향으로 등장
   bodies[bodies.length-1].tube = dropTube;                                      // 이 몸체가 타고 내려오는 관
-  nextTier = randTier(); lastDrop = gt;
+  nextTier = randTier();
+  // 발사 시각은 gt 로 다시 맞추지 않고 간격만큼 더합니다. gt 로 맞추면 매번 프레임 한 칸(최대 16ms)씩
+  // 밀려서 발사 간격이 들쭉날쭉해집니다. 한참 밀렸을 때만(정지 후 복귀 등) 현재 시각으로 다시 잡습니다.
+  const iv = dropIntervalMs();
+  lastDrop = (gt - lastDrop > iv * 3) ? gt : lastDrop + iv;
 }
 
 /* ---------- 사운드 (Web Audio 합성, 외부 파일 없음) ---------- */
@@ -657,6 +668,14 @@ const SFX = {
     if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
     this.theme().merge(tier, melodyNext(tier));          // 합칠 때마다 멜로디의 다음 음
   },
+  // 마지막 합체: 음정을 위로 올리는 대신 배를 울리는 저음을 깔아 준다.
+  // 음정이 올라가면 "끝났다"는 신호가 되고, 저음이 깔리면 "무슨 일이 난다"는 신호가 됩니다.
+  rumble(dur = 1.8) {
+    if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
+    tone({ type: "sine",     f0: 62, f1: 26, a: 0.06, d: dur,       vol: 0.42, verbAmt: 0.5 });
+    tone({ type: "triangle", f0: 41, f1: 19, a: 0.08, d: dur*0.9,   vol: 0.26, verbAmt: 0.4 });
+    noise({ type: "lowpass", f0: 190, f1: 48, q: 0.7, a: 0.05, d: dur*0.8, vol: 0.30, verbAmt: 0.3 });
+  },
   // 왁뿌볼 껍질이 깨질 때 (stage 0~2). 아래 crack() 과 이름이 겹치지 않게 따로 둔다
   shellCrack(stage, tier) {
     if (!actx || actx.state !== "running" || SETTINGS.soundVolume <= 0) return;
@@ -844,6 +863,9 @@ const SFX = {
 
 /* ---------- 물리 ---------- */
 const HIT_MIN = 140;
+// 스케일 펄스를 낼 최소 충돌 세기. 쌓여서 가만히 있는 공들이 서로 미세하게 눌리는 것까지
+// 울리면 화면이 계속 떨려 보이므로, 소리를 낼 만한 세기부터 울립니다.
+const PULSE_MIN = 200;
 const ROLL = 0.35;             // 접촉 마찰(구름) 강도
 const hits = [];
 function presetPhysics() { return PRESETS[presetName].physics || {}; }
@@ -895,6 +917,7 @@ function swallow(h, o) {
 }
 function step(dt) {
   const g = gravity(), ph = presetPhysics(), e = bounce(), wob = ph.wobble || 0;
+  const pul = PRESETS[presetName].pulse || 0;   // 충돌을 찌그러짐이 아니라 스케일 펄스로 보여 줄 세기
   if (!finaleBusy) pullBlackholes(dt);
   for (const b of bodies) {
     if (b.suck || b.collapse != null || b.pin) continue;   // 피날레가 직접 위치를 잡는 중: 물리 건너뜀
@@ -912,6 +935,11 @@ function step(dt) {
     if (wob) {                                        // 젤리 찌그러짐: 스프링으로 원래 모양으로 복귀 (진동하며)
       b.sq = b.sq || 0; b.sqv = b.sqv || 0;
       b.sqv += (-b.sq * 900 - b.sqv * 9) * dt; b.sq += b.sqv * dt;
+    }
+    if (pul && (b.pu || b.pv)) {                      // 스케일 펄스: 방향 없이 고르게 커졌다 작아지며 잦아든다
+      // 감쇠를 세게 걸어 0.25초 안에 멎게 합니다. 오래 울리면 그 공이 계속 느린 경로로 그려집니다.
+      b.pv += (-b.pu * 1400 - b.pv * 26) * dt; b.pu += b.pv * dt;
+      if (Math.abs(b.pu) < 0.01 && Math.abs(b.pv) < 0.12) { b.pu = 0; b.pv = 0; }
     }
   }
   for (const b of bodies) {
@@ -937,6 +965,7 @@ function step(dt) {
         if (vn > 0) {
           if (vn > HIT_MIN) hits.push({ tier: b.tier, strength: vn });
           if (wob) { b.sqv = (b.sqv || 0) + Math.min(6, vn / 260) * wob; b.sqn = Math.atan2(ny, nx); }   // 벽 방향으로 찌그러짐
+          if (pul && vn > PULSE_MIN) { b.pu = b.pu || 0; b.pv = (b.pv || 0) + Math.min(5, vn / 300) * pul; }   // 벽에 부딪히면 한 번 울림
           b.vx -= (1+e) * vn * nx; b.vy -= (1+e) * vn * ny;
           const tx = -ny, ty = nx, vt = b.vx*tx + b.vy*ty;
           const slip = vt - b.av * b.r;                       // 접촉점 미끄러짐 → 굴러가도록 보정
@@ -978,6 +1007,9 @@ function step(dt) {
       if (vn < 0) {
         if (-vn > HIT_MIN) hits.push({ tier: Math.max(a.tier, b.tier), strength: -vn });
         if (wob) { const k = Math.min(6, -vn / 260) * wob; a.sqv = (a.sqv || 0) + k; b.sqv = (b.sqv || 0) + k; a.sqn = Math.atan2(ny, nx); b.sqn = Math.atan2(-ny, -nx); }
+        // 쌓여서 가만히 있는 공들도 서로 미세하게 눌립니다. 소리를 낼 만한 세기에만 울려야
+        // 대부분의 공이 정수 좌표 블릿 빠른 경로에 남습니다.
+        if (pul && -vn > PULSE_MIN) { const k = Math.min(5, -vn / 300) * pul; a.pu = a.pu || 0; b.pu = b.pu || 0; a.pv = (a.pv || 0) + k; b.pv = (b.pv || 0) + k; }
         const jimp = -(1+e) * vn / (1/ma + 1/mb);
         a.vx -= jimp*nx/ma; a.vy -= jimp*ny/ma;
         b.vx += jimp*nx/mb; b.vy += jimp*ny/mb;
@@ -1011,7 +1043,17 @@ function doMerge(a, b) {
   spawn(next, x, y, vx*0.5, vy*0.5);
   const nb = bodies[bodies.length-1]; nb.pop = 1;
   shake = Math.min(14, 3 + next*1.2);
-  if (next === TIERS.length - 1) finale(x, y, TIERS[next].glow);   // 마지막 요소 탄생!
+  if (next === TIERS.length - 1) {                                 // 마지막 요소 탄생!
+    // 마지막 합체만 실제 시간으로 늘려서 보여 줍니다. 음정을 위로 올리는 대신 저음을 깔고,
+    // 늘린 구간이 끝나는 자리에 짧은 리액션(한 번 울리고 한 번 흔들림)을 둡니다.
+    const sf = PRESETS[presetName].slowFinal;
+    if (sf) {
+      slowmo(sf);
+      SFX.rumble(2.6);
+      later(sf * 1000 * SLOW_K, () => { nb.pv = (nb.pv || 0) + 9; shake = Math.max(shake, 26); });
+    }
+    finale(x, y, TIERS[next].glow);
+  }
 }
 // 축하 연출: 큰 폭발 파티클 + 색종이 + 충격파 여러 겹 + 화면 흔들림. 이후 게임 정지 (텍스트 없음)
 // 프리셋에 finale 값이 있으면(신화 = 번개, 오디세이아 = 화살, 강아지 = 달빛, 우주 = 블랙홀) 색종이 대신 그 연출로 이어짐
@@ -1036,6 +1078,8 @@ function finale(x, y, color) {
   if (kind === "annihilate"){ annihilateFinale(x, y, palette); return; }  // 반물질이 터져 전부 사라짐
   if (kind === "durian")    { durianFinale(x, y, palette); return; }      // 두리안 왁스가 저절로 갈라지다 팡 터짐
   if (kind === "cool")      { coolFinale(x, y, palette); return; }        // 남은 것이 하나씩 식어 꺼지고 화면이 완전히 검게 닫힘
+  if (kind === "bloom")     { bloomFinale(x, y, palette); return; }       // 마지막 것이 부풀어 오르고 나머지가 빛이 되어 그 안으로 들어감
+  if (kind === "rageout")   { rageFinale(x, y, palette); return; }        // 분노가 터져 전부 밀려나고 화면이 붉게 찢어짐
   confettiBurst(x, y, palette);
   setTimeout(() => SFX.merge(TIERS.length - 1), 0); setTimeout(() => SFX.merge(TIERS.length - 2), 180); setTimeout(() => SFX.merge(TIERS.length - 1), 360);
 }
@@ -1278,6 +1322,55 @@ function coolFinale(x, y, palette) {
     rings.push({ x: end.x, y: end.y, r0: end.r*0.9, color: "#9fb6dc", t: 0 });
   });
 }
+/* ---------- 생명 피날레 (생명의 크기) ----------
+   마지막 대륙이 한가운데로 와서 천천히 부풀고, 남은 것들이 가까운 순서대로 빛이 되어 그 안으로 들어갑니다.
+   전부 크기와 투명도만 바꾸므로 실시간 블러나 그림자를 쓰지 않습니다.  */
+function bloomFinale(x, y, palette) {
+  finaleBusy = true; physicsHoldMs = 11000;
+  const end = bodies.find(b => b.tier === TIERS.length - 1) || { x, y, r: TIERS[TIERS.length-1].r };
+  end.pin = { x: BOWL.cx, y: BOWL.cy - BOWL.R*0.04 };
+  later(420, () => { end.swell = 0; SFX.rumble(2.4); });                   // 1) 한가운데에서 부풀기 시작
+  const targets = bodies.filter(b => b !== end)                            // 2) 가까운 것부터 빛이 되어 빨려 들어감
+    .sort((a, b) => Math.hypot(a.x-end.x, a.y-end.y) - Math.hypot(b.x-end.x, b.y-end.y));
+  const gap = targets.length ? Math.min(150, 2400 / targets.length) : 0;
+  targets.forEach((b, i) => later(700 + i*gap, () => {
+    if (b.gone != null) return;
+    b.gone = 0; b.pin = { x: b.x, y: b.y };
+    if (i % 3 === 0) SFX.suck(0.14 + 0.05*(i % 4));
+  }));
+  later(700 + targets.length*gap + 1200, () => {                           // 3) 마지막으로 한 번 크게 울리고 끝
+    flash = 0.5; shake = 22;
+    for (let i = 0; i < 3; i++) rings.push({ x: end.x, y: end.y, r0: end.r*(0.9 + i*0.5), color: palette[i % palette.length], t: -i*0.2 });
+    SFX.rumble(2.0);
+  });
+}
+/* ---------- 분노 피날레 (빡침 게이지) ----------
+   마지막 단계가 나오면 화면이 붉게 차오르고, 남은 것들이 바깥으로 밀려나며 빛으로 흩어집니다.
+   화면 전체를 붉게 칠하는 건 사각형 한 번이고, 흔들림은 좌표 이동이라 그리기 비용이 거의 없습니다.  */
+function rageFinale(x, y, palette) {
+  finaleBusy = true; physicsHoldMs = 9000;
+  const end = bodies.find(b => b.tier === TIERS.length - 1) || { x, y, r: TIERS[TIERS.length-1].r };
+  end.pin = { x: BOWL.cx, y: BOWL.cy - BOWL.R*0.04 };
+  rageDimTo = 0.22; SFX.rumble(2.6);                                        // 1) 붉은 기운이 배어 나온다
+  later(260, () => { rageDimTo = 0.4; shake = Math.max(shake, 16); });
+  later(900, () => {                                                        // 2) 터진다: 남은 것이 바깥으로 밀려남
+    flash = 1; shake = 44; rageDimTo = 0.86; SFX.rumble(2.2);
+    for (let i = 0; i < 4; i++) rings.push({ x: end.x, y: end.y, r0: 130 + i*110, color: ["#ffffff", "#ffd0c0", "#ff5a3c", "#d21a1a"][i], t: -i*0.16 });
+    for (const b of bodies) {
+      if (b === end) continue;
+      const dx = b.x - end.x, dy = b.y - end.y, d = Math.hypot(dx, dy) || 1;
+      b.vx += dx/d * 1500; b.vy += dy/d * 1500 - 260;
+    }
+    for (let i = 0; i < 90; i++) {
+      const a = Math.random()*Math.PI*2, sp = 500 + Math.random()*1100;
+      addParticle(end.x, end.y, Math.cos(a)*sp, Math.sin(a)*sp, 1.2, ["#ffffff", "#ffd0c0", "#ff5a3c"][i % 3], 4 + Math.random()*8, Math.random()*Math.PI);
+    }
+  });
+  later(1500, () => {                                                       // 3) 밀려난 것부터 빛으로 흩어짐
+    bodies.filter(b => b !== end).forEach((b, i) => later(i*70, () => { if (b.gone == null) b.gone = 0; }));
+  });
+  later(3600, () => { rageDimTo = 0.34; });                                 // 4) 붉은 기운만 옅게 남는다
+}
 function lastPhoton(b) {                                                   // 꺼지기 직전에 흘러나오는 마지막 빛 한 점
   const a = Math.random()*Math.PI*2, r = b.r * (0.2 + Math.random()*0.7);
   drifts.push({ x: b.x + Math.cos(a)*r, y: b.y + Math.sin(a)*r, vx: (Math.random()-.5)*26, vy: (Math.random()-.5)*26, g: 0,
@@ -1466,8 +1559,9 @@ function burst(x, y, color, r) {
 // 코드로 그리는 도형(POLY, SHAPES)과 LIGHT_PASS 는 presets.js 에 있습니다 (프레스 모드와 함께 씁니다)
 function makeSprite(t) {
   const r = t.drawR || t.r, ext = 1.05;   // drawR: 충돌 반지름은 그대로 두고 그림만 크게 그릴 때
-  // 여백은 글로우가 번질 자리입니다. 넓을수록 느립니다 (스프라이트 넓이가 그대로 매 프레임 합성 비용)
-  const pad = Math.round(16 + r*0.14), S = Math.ceil((r*ext + pad) * 2);
+  // 여백은 글로우가 번질 자리입니다. 넓을수록 느립니다 (스프라이트 넓이가 그대로 매 프레임 합성 비용).
+  // 고정분을 작게 두고 반지름에 비례시킵니다. 고정분이 크면 작은 공일수록 그림의 대부분이 빈 여백이 됩니다.
+  const pad = Math.round(6 + r*0.20), S = Math.ceil((r*ext + pad) * 2);
   const img = t._imgKey && imgCache[t._imgKey];
   const hasImg = !!(img && img.complete && img.naturalWidth);
   const lit = !hasImg && !t.emoji;        // 키트 PNG·이모지는 조명이 그림에 이미 들어 있어 light 층이 통째로 비어 있다
@@ -1504,6 +1598,27 @@ function makeSprite(t) {
   return { base: layer(false), light: lit ? layer(true) : null, S, lit };   // 빈 조명 층은 만들지도 그리지도 않는다
 }
 function sprite(t) { if (!t._sprite) t._sprite = makeSprite(t); return t._sprite; }
+/* ---------- 충돌 펄스 그림 ----------
+   부딪힌 공을 ctx.scale 로 키웠다 줄이면 캔버스가 그 공의 픽셀을 전부 다시 샘플링합니다.
+   같은 그림인데 10배 넘게 비싸지고, 쌓인 공의 2할이 늘 울리고 있어서 화면 전체가 느려졌습니다.
+   그래서 몇 단계 크기로 미리 구워 두고, 그릴 때는 가장 가까운 단계를 정수 좌표로 한 번 블릿합니다.
+   단계 간격이 6% 안팎이라 0.25초짜리 펄스에서는 눈에 띄지 않습니다.  */
+const PULSE_SCALES = [0.88, 0.94, 1.00, 1.07, 1.14, 1.20];
+function pulseSprite(t, pu) {
+  const want = 1 + Math.max(-0.2, Math.min(0.2, pu * 0.085));
+  let bi = 0, bd = Infinity;
+  for (let i = 0; i < PULSE_SCALES.length; i++) { const d = Math.abs(PULSE_SCALES[i] - want); if (d < bd) { bd = d; bi = i; } }
+  if (PULSE_SCALES[bi] === 1) return null;                      // 원본 크기와 같으면 원본을 그대로 쓴다
+  const sp = sprite(t);
+  if (!sp.pulse) sp.pulse = [];
+  if (!sp.pulse[bi]) {
+    const S2 = Math.round(sp.S * PULSE_SCALES[bi]);
+    const c = document.createElement("canvas"); c.width = c.height = S2;
+    c.getContext("2d").drawImage(sp.base, 0, 0, S2, S2);
+    sp.pulse[bi] = { c, S: S2 };
+  }
+  return sp.pulse[bi];
+}
 // 동작 연출용 여벌 그림의 스프라이트 (본체와 같은 방식으로 한 번만 만들어 두고 재사용)
 function frameSprite(t, i) {
   const key = t._frameKeys && t._frameKeys[i];
@@ -1819,13 +1934,17 @@ function drawBody(b) {
   // 회전이나 소수점 좌표가 끼는 순간 캔버스가 픽셀을 다시 샘플링해서 같은 그림이 10배 넘게 비싸진다.
   if ((t.noSpin || !b.rot) && !b.pop && k == null && cr == null && sl == null && hw == null && cry == null
       && sk == null && col == null && du == null && go == null && cl == null
-      && b.ash == null && b.crack == null && !b.jerk && b.grow == null && b.aim == null && !b.sq) {
-    const ix = Math.round(b.x - h), iy = Math.round(b.y - h);
-    ctx.drawImage(sp.base, ix, iy);
+      && b.ash == null && b.crack == null && !b.jerk && b.grow == null && b.aim == null && b.swell == null && !b.sq
+      && !(b.pu && sp.lit)) {                                   // 조명 층이 있는 코드 도형은 펄스를 미리 구워 두지 않았다
+    const ps = b.pu ? pulseSprite(t, b.pu) : null;
+    const img = ps ? ps.c : sp.base, hh = ps ? ps.S/2 : h;
+    const ix = Math.round(b.x - hh), iy = Math.round(b.y - hh);
+    ctx.drawImage(img, ix, iy);
     if (sp.lit) ctx.drawImage(sp.light, ix, iy);
     return;
   }
   let s = 1;
+  if (b.pu) s *= 1 + Math.max(-0.2, Math.min(0.2, b.pu * 0.085));   // 충돌 펄스: 찌그러뜨리지 않고 크기만 울린다 (빠른 경로는 구워 둔 그림을 씁니다)
   if (b.pop) { b.pop = Math.max(0, b.pop - 0.08); s = 1 + Math.sin(b.pop*Math.PI) * 0.28; }
   if (k != null) s *= 1 + 0.14*Math.sin(Math.min(1, k)*Math.PI) - 0.3*k;   // 번개에 맞아 부풀었다가 오그라듦
   if (cr != null) s *= 1 - 0.5*cr;                                         // 수압에 짜부라짐
@@ -1839,6 +1958,7 @@ function drawBody(b) {
   }
   if (b.jerk) ctx.rotate(b.jerk);                                            // 손목을 젖혔다가 튕기는 반동
   if (b.grow != null) { const q = Math.min(1, b.grow); ctx.scale(0.55 + 0.45*q, 0.55 + 0.45*q); }   // 등장하며 커짐
+  if (b.swell != null) { const q = 1 + 0.75 * (1 - Math.pow(1 - Math.min(1, b.swell), 3)); ctx.scale(q, q); }   // 마지막 것이 부풀어 오름
   if (b.aim != null) {                                                       // 활시위를 당기는 중: 뒤로 젖혀지고 팽팽하게 떨림
     const q = Math.min(1, b.aim);
     ctx.rotate(-0.16*q); ctx.translate((Math.random()-.5)*3*q, (Math.random()-.5)*3*q);
@@ -2031,6 +2151,7 @@ function render() {
   ctx.globalAlpha = 1;
   if (voidDim > 0.003) { ctx.fillStyle = `rgba(0,0,0,${voidDim})`; ctx.fillRect(0, 0, W, H); }   // 블랙홀이 삼킨 뒤 닫히는 화면
   if (whiteDim > 0.003) { ctx.fillStyle = `rgba(255,252,245,${whiteDim})`; ctx.fillRect(0, 0, W, H); }   // 반물질 폭발의 하얀 빛
+  if (rageDim > 0.003) { ctx.fillStyle = `rgba(210,26,26,${rageDim})`; ctx.fillRect(0, 0, W, H); }   // 분노로 붉게 물든 화면
 
   if (overSince) {
     ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(0, 0, W, H);
@@ -2043,8 +2164,16 @@ function render() {
 /* ---------- 루프 ---------- */
 let last = performance.now(), acc = 0;
 const FIXED = 1/240;
+/* ---------- 마지막 합체 슬로모 ----------
+   마지막 단계가 태어나는 순간에만 게임 시간을 늦춥니다. 실제 시간으로 남은 길이를 재므로
+   화면이 몇 프레임을 그리든 늘어나는 길이가 같고, 물리는 그대로 고정 타임스텝을 씁니다.  */
+let slowLeft = 0;
+const SLOW_K = 0.3;                                   // 슬로모 중 게임 시간이 흐르는 배속
+function slowmo(sec) { slowLeft = Math.max(slowLeft, sec); }
 function loop(now) {
-  const frame = Math.min(0.05, (now - last)/1000); last = now;
+  const real = Math.min(0.05, (now - last)/1000); last = now;
+  let frame = real;
+  if (slowLeft > 0 && !paused) { slowLeft -= real; frame = real * SLOW_K; }
   if (!paused) {
     gt += frame * 1000; acc += frame;
     if (ended) {                                                     // 마지막 요소 도달: 더 이상 떨어지지 않고 3초 뒤 물리도 정지
@@ -2088,6 +2217,7 @@ function loop(now) {
           b.vx = b.vy = b.av = 0;
         }
         if (b.grow != null && b.grow < 1) b.grow = Math.min(1, b.grow + frame * 2.4);   // 등장하며 커짐
+        if (b.swell != null && b.swell < 1) b.swell = Math.min(1, b.swell + frame * 0.55);  // 마지막 것이 천천히 부풀어 오름
         if (b.jerk) { b.jerk *= Math.pow(0.0007, frame); if (Math.abs(b.jerk) < 0.002) b.jerk = 0; }
         if (b.aim != null) b.aim += frame * 1.3;                 // 시위를 당기는 중
         if (b.cry != null) b.cry += frame * 0.55;                // 늑대가 우는 중
@@ -2149,6 +2279,7 @@ function loop(now) {
     nightDim += (nightDimTo - nightDim) * Math.min(1, frame * 0.9);
     voidDim += (voidDimTo - voidDim) * Math.min(1, frame * 1.1);
     whiteDim += (whiteDimTo - whiteDim) * Math.min(1, frame * (whiteDimTo > whiteDim ? 16 : whiteFall));   // 번쩍 차올랐다가 정해진 속도로 빠짐
+    rageDim += (rageDimTo - rageDim) * Math.min(1, frame * (rageDimTo > rageDim ? 14 : 2.2));
     for (const d of drifts) {                                    // 재·기포처럼 천천히 흘러가는 조각들
       d.vy += d.g * frame; d.sway += frame * 2.4;
       d.x += (d.vx + Math.sin(d.sway) * d.swing) * frame; d.y += d.vy * frame;
