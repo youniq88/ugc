@@ -112,9 +112,19 @@ function kitUrls(name) {
   return kit.map(b => b + name.split("/").map(encodeURIComponent).join("/"));
 }
 function imageCandidates(t) { return t.image ? [t.image] : t.img ? kitUrls(t.img) : []; }
+/* ---------- 피날레 캐릭터 ----------
+   프리셋이 cheer 를 가지면, 목표에 닿아 전부 터진 뒤 그 캐릭터가 나와서 춤을 춥니다.
+   그림 여러 장을 번갈아 보여 주고 위아래로 통통 튀게 하는 게 전부라 매 프레임 새로 만드는 것이 없습니다.  */
+function cheerSpec() { return presetName && PRESETS[presetName].cheer || null; }
+function cheerFrames() {
+  const c = cheerSpec(); if (!c) return [];
+  return (c.imgs || []).map(f => imgCache[kitUrls(f)[0]]).filter(im => im && im.complete && im.naturalWidth);
+}
 function loadImages() {
   const jobs = [];
-  for (const t of ITEMS) {
+  const extra = [];
+  { const c = cheerSpec(); if (c) for (const f of (c.imgs || [])) extra.push({ img: f }); }
+  for (const t of ITEMS.concat(extra)) {
     const cands = imageCandidates(t); if (!cands.length) continue;
     const key = cands[0]; t._imgKey = key;
     if (imgCache[key] !== undefined) continue;
@@ -186,14 +196,15 @@ const PALETTE = ["#ff8a1e", "#2eff6a", "#3d7bff", "#ff2e78", "#ffe03d", "#22d7ff
 
 let balls = [], particles = [], goo = [], confetti = [], crushing = [];
 let uid = 0, peak = 0, stage = 0;   // stage: 지금 내보내는 요소 단계 (뒤로는 안 간다)
-let gt = 0, paused = true, ended = false, endedAt = 0, overSince = 0;   // overSince 는 record.js 호환용 (이 모드엔 게임 오버가 없다)
+let gt = 0, paused = true, ended = false, endedAt = 0, overSince = 0;
+let cheer = null;                        // 피날레에 나와서 춤추는 캐릭터 (프리셋의 cheer 설정이 있을 때만)   // overSince 는 record.js 호환용 (이 모드엔 게임 오버가 없다)
 let shake = 0, flash = 0, pressT = 0, cycleId = 0;
 let TIERS = [];                                                         // record.js 호환용 빈 값 (imgCache 는 위에 있다)
 let ringCanvas = null, ringCanvasR = -1;
 
 function reset() {
   balls = []; particles = []; goo = []; confetti = []; crushing = [];
-  uid = 0; peak = 0; stage = 0; ended = false; endedAt = 0; overSince = 0;
+  uid = 0; peak = 0; stage = 0; ended = false; endedAt = 0; overSince = 0; cheer = null;
   shake = 0; flash = 0; pressT = 0; cycleId = 0;
   ARENA.R = baseArenaR(); ringCanvasR = -1;
   spawn(ARENA.cx, ARENA.cy + 6, (Math.random()-.5)*160, (Math.random()-.5)*160);   // 첫 공은 압착기 안에서 시작
@@ -537,6 +548,7 @@ function finale() {
     confettiBurst(ARENA.cx, ARENA.cy);
     setTimeout(() => confettiBurst(ARENA.cx - 320, ARENA.cy + 120), 420);
     setTimeout(() => confettiBurst(ARENA.cx + 320, ARENA.cy + 120), 780);
+    if (cheerFrames().length) setTimeout(() => { cheer = { t: 0 }; SFX.boom(); shake = Math.max(shake, 18); }, 360);
   }, 520);
 }
 function confettiBurst(x, y) {
@@ -650,6 +662,49 @@ function render() {
   ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 14;
   ctx.fillText(peak.toLocaleString(), W - 44, 52);
   ctx.shadowBlur = 0;
+  drawCheer();                                                   // 화면을 가득 채우므로 맨 위에 그린다
+}
+
+/* 춤: 그림 세 장을 번갈아 넘기면서 통통 튀고 좌우로 기울인다. 크기와 위치와 각도만 바꾼다 */
+function drawCheer() {
+  if (!cheer) return;
+  const frames = cheerFrames(); if (!frames.length) return;
+  const spec0 = cheerSpec();
+  const t = cheer.t;
+  const rise = Math.min(1, t / 0.5);                             // 아래에서 솟아오르며 등장
+  const ease = 1 - Math.pow(1 - rise, 3);
+  const im = frames[Math.floor(t * 7) % frames.length];          // 초당 7장
+  // 세로만 맞추면 정사각형 그림일 때 가로가 화면을 넘어 양옆이 잘립니다. 둘 다 맞춥니다.
+  const full = (spec0 && spec0.h) || 1480;                       // 화면을 채울 세로 길이
+  const ar = im.naturalWidth / im.naturalHeight;
+  const fullH = Math.min(full, W * 0.96 / ar);                   // 가로가 화면을 넘지 않는 선까지만
+  const h = fullH * (0.3 + 0.7*ease), w = h * ar;
+  const hop = Math.abs(Math.sin(t * 9)) * 46 * ease;             // 제자리 점프
+  const tilt = Math.sin(t * 4.5) * 0.1 * ease;                   // 좌우로 흔들흔들
+  const base = H/2 + fullH/2 + 70;                               // 가운데보다 조금 아래에 선다
+  const cx = W/2, cy = base + (1 - ease) * 900 - hop;
+  const sp = cheerSprite(im);
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, t / 0.2);
+  ctx.translate(cx, cy); ctx.rotate(tilt);
+  const pw = w * sp.width / sp._w0;                               // 구워 둔 그림은 글로우만큼 더 넓다
+  ctx.drawImage(sp, -pw/2, -h - (pw - w)/2, pw, pw * sp.height / sp.width);
+  ctx.restore();
+}
+// 글로우는 매 프레임 다시 흐리면 무거우니 그림마다 한 번만 구워 둔다
+const cheerCache = new Map();
+function cheerSprite(im) {
+  let c = cheerCache.get(im);
+  if (c) return c;
+  const spec = cheerSpec(), pad = spec && spec.glow ? 70 : 0;
+  const w0 = im.naturalWidth, h0 = im.naturalHeight;
+  c = document.createElement("canvas"); c.width = w0 + pad*2; c.height = h0 + pad*2;
+  const g = c.getContext("2d");
+  if (pad) { g.save(); g.shadowColor = spec.glow; g.shadowBlur = pad*0.8; g.drawImage(im, pad, pad); g.shadowBlur = pad*0.35; g.drawImage(im, pad, pad); g.restore(); }
+  g.drawImage(im, pad, pad);
+  c._w0 = w0;
+  cheerCache.set(im, c);
+  return c;
 }
 
 /* ---------- 루프 ---------- */
@@ -695,6 +750,7 @@ function loop(now) {
     particles = particles.filter(p => p.life > 0);
     for (const c of confetti) { c.sway += frame*3; c.x += (c.vx + Math.sin(c.sway)*90)*frame; c.y += c.vy*frame; c.vy += 1500*frame; c.vx *= 0.985; c.rot += c.spin*frame; c.life -= frame*0.5; }
     confetti = confetti.filter(c => c.life > 0 && c.y < H + 120);
+    if (cheer) cheer.t += frame;
     shake *= Math.pow(0.0016, frame); if (shake < 0.4) shake = 0;
     flash -= frame * 1.8; if (flash < 0) flash = 0;
   }
